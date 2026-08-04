@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>バスナビ</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#155e9c" />
+<link rel="manifest" href="manifest.json" />
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7"></script>
+
+<style>
+  :root{
+    --bg:#eef2f6;
+    --surface:#ffffff;
+    --ink:#16222c;
+    --muted:#6c7a86;
+    --line:#e1e7ed;
+    --blue:#155e9c;
+    --blue-dark:#0d4373;
+    --orange:#e07a1f;
+    --red:#e0405a;
+    --green:#1c9a5b;
+    --gold:#caa23a;
+    --radius:16px;
+    --radius-sm:10px;
+    --shadow:0 6px 20px rgba(15,35,55,0.14);
+    --nav-h:64px;
+    --top-h:auto;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic",-apple-system,BlinkMacSystemFont,sans-serif;
+    -webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;
+  }
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;}
+
+  /* ===== Top bar ===== */
+  #topbar{
+    position:relative;
+    z-index:900;
+    background:linear-gradient(180deg,var(--blue) 0%, var(--blue-dark) 100%);
+    padding:10px 12px 12px;
+    color:#fff;
+    box-shadow:0 2px 10px rgba(0,0,0,0.15);
+  }
+  #brandRow{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  #brandRow .logo{
+    width:30px;height:30px;border-radius:8px;
+    background:#fff;color:var(--blue);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:900;font-size:15px;flex:none;
+  }
+  #brandRow .brandText{font-size:16px;font-weight:700;letter-spacing:.02em;}
+  #brandRow .place{margin-left:auto;font-size:11px;opacity:.85;}
+
+  #searchRow{display:flex;gap:6px;position:relative;}
+  #searchBox{
+    flex:1;
+    padding:11px 14px;
+    border-radius:12px;
+    border:none;
+    font-size:15px;
+    outline:none;
+    background:#fff;
+    color:var(--ink);
+  }
+  #searchBox::placeholder{color:#9aa7b0;}
+  .iconBtn{
+    width:44px;height:44px;flex:none;
+    border-radius:12px;border:none;
+    background:rgba(255,255,255,0.16);
+    color:#fff;font-size:18px;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+  }
+  .iconBtn:active{background:rgba(255,255,255,0.32);}
+
+  #suggestBox{
+    position:absolute; top:calc(100% + 6px); left:0; right:0;
+    background:#fff; border-radius:12px; overflow:hidden;
+    box-shadow:var(--shadow); z-index:950; color:var(--ink);
+    max-height:52vh; overflow-y:auto; display:none;
+  }
+  #suggestBox.show{display:block;}
+  .suggestItem{
+    padding:12px 14px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:10px; cursor:pointer;
+  }
+  .suggestItem:last-child{border-bottom:none;}
+  .suggestItem:active{background:#f0f5fa;}
+  .suggestItem .dot{width:9px;height:9px;border-radius:50%;background:var(--green);flex:none;}
+  .suggestItem .name{font-size:14.5px;font-weight:600;}
+  .suggestItem .sub{font-size:11.5px;color:var(--muted);margin-top:1px;}
+  .suggestEmpty{padding:16px;text-align:center;color:var(--muted);font-size:13px;}
+
+  .shortcutRow{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+  .shortcutChip{
+    background:rgba(255,255,255,0.16);
+    color:#fff;
+    border:1px solid rgba(255,255,255,0.35);
+    border-radius:20px;
+    padding:6px 12px;
+    font-size:12.5px;
+    cursor:pointer;
+  }
+  .shortcutChip:active{background:rgba(255,255,255,0.32);}
+
+  /* ===== Map ===== */
+  #mapWrap{flex:1;position:relative;min-height:0;}
+  #map{position:absolute;inset:0;}
+
+  .locateBtn{
+    position:absolute; right:12px; bottom:12px; z-index:400;
+    width:50px;height:50px;border-radius:50%;
+    background:#fff;border:none;box-shadow:var(--shadow);
+    font-size:20px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer; color:var(--blue);
+  }
+  .locateBtn:active{background:#eef2f6;}
+
+  /* nearest-stop floating card */
+  #nearestCard{
+    position:absolute; left:12px; right:12px; bottom:12px; z-index:390;
+    background:var(--surface); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:12px 14px;
+    display:flex; align-items:center; gap:12px;
+    cursor:pointer;
+    transition:transform .15s ease;
+  }
+  #nearestCard:active{transform:scale(0.98);}
+  #nearestCard .pin{
+    width:38px;height:38px;border-radius:50%;
+    background:var(--red); color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px; flex:none;
+  }
+  #nearestCard .body{flex:1;min-width:0;}
+  #nearestCard .label{font-size:11px;color:var(--muted);}
+  #nearestCard .stopName{font-size:15.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #nearestCard .walk{font-size:12px;color:var(--muted);margin-top:1px;}
+  #nearestCard .chev{color:var(--muted);font-size:18px;flex:none;}
+
+  /* floating "start nav" bar shown once destination chosen */
+  #navCta{
+    position:absolute; left:12px; right:12px; bottom:12px; z-index:395;
+    background:var(--green); color:#fff;
+    border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:12px 14px; display:none; align-items:center; gap:10px;
+    cursor:pointer;
+  }
+  #navCta.show{display:flex;}
+  #navCta .icon{font-size:20px;}
+  #navCta .body{flex:1;min-width:0;}
+  #navCta .t1{font-size:11px;opacity:.9;}
+  #navCta .t2{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #navCta .clearX{
+    width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.25);
+    display:flex;align-items:center;justify-content:center;font-size:14px;flex:none;
+  }
+
+  /* ===== Bottom nav ===== */
+  #bottomNav{
+    height:var(--nav-h); flex:none; z-index:900;
+    background:#fff; border-top:1px solid var(--line);
+    display:flex; padding-bottom:env(safe-area-inset-bottom);
+    box-shadow:0 -2px 10px rgba(0,0,0,0.06);
+  }
+  .navItem{
+    flex:1; border:none; background:none; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:2px; color:var(--muted); font-size:11px; padding-top:4px;
+  }
+  .navItem .ic{font-size:20px;}
+  .navItem.active{color:var(--blue); font-weight:700;}
+
+  /* ===== Sheets (bottom sliding panels) ===== */
+  .overlay{
+    position:fixed; inset:0; background:rgba(15,25,35,0.42);
+    z-index:1000; opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .overlay.show{opacity:1; pointer-events:auto;}
+
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; z-index:1001;
+    background:var(--surface);
+    border-radius:20px 20px 0 0;
+    box-shadow:0 -8px 30px rgba(0,0,0,0.25);
+    max-height:88vh;
+    display:flex; flex-direction:column;
+    transform:translateY(105%);
+    transition:transform .25s cubic-bezier(.2,.8,.3,1);
+  }
+  .sheet.show{transform:translateY(0);}
+  .sheet.fullscreen{max-height:100vh; height:100vh; border-radius:0;}
+
+  .sheetHandle{
+    width:40px;height:4px;border-radius:2px;background:var(--line);
+    margin:10px auto 4px;
+  }
+  .sheetHeader{
+    display:flex; align-items:center; padding:6px 16px 10px;
+    border-bottom:1px solid var(--line); flex:none;
+  }
+  .sheetHeader h2{font-size:16px;margin:0;flex:1;}
+  .sheetClose{
+    width:32px;height:32px;border-radius:50%;border:none;background:#f0f3f6;
+    font-size:16px; color:var(--muted); cursor:pointer;
+  }
+  .sheetBody{overflow-y:auto; padding:14px 16px 24px; flex:1;}
+
+  /* ===== Detail sheet content ===== */
+  .directionCard{
+    border:1px solid var(--line); border-radius:var(--radius-sm);
+    margin-bottom:12px; overflow:hidden;
+  }
+  .directionCard .dHead{
+    padding:12px 14px; color:#fff; display:flex; align-items:center; gap:10px;
+  }
+  .directionCard .dArrow{font-size:22px; flex:none;}
+  .directionCard .dText{flex:1; min-width:0;}
+  .directionCard .dDir{font-size:16.5px; font-weight:800; line-height:1.25;}
+  .directionCard .dRoute{font-size:11.5px; opacity:.9; margin-top:1px;}
+  .directionCard .dDest{font-size:11.5px; opacity:.95; margin-top:3px;}
+  .directionCard .dNext{
+    padding:10px 14px; display:flex; align-items:baseline; gap:8px;
+    background:#f7faf9;
+  }
+  .directionCard .dNext .nTime{font-size:22px; font-weight:800; color:var(--green);}
+  .directionCard .dNext .nMin{font-size:13px; color:var(--muted);}
+  .directionCard .dNext.past .nTime{color:var(--muted);}
+  .directionCard .timetableWrap{padding:0 14px 12px;}
+  .ttGrid{display:flex; flex-wrap:wrap; gap:6px;}
+  .ttChip{
+    font-size:12.5px; padding:5px 9px; border-radius:8px;
+    background:#eef2f6; color:var(--muted);
+  }
+  .ttChip.next{background:var(--green); color:#fff; font-weight:700;}
+  .goHereBtn{
+    width:100%; padding:12px; border:none; border-radius:10px;
+    background:var(--blue); color:#fff; font-size:14.5px; font-weight:700;
+    margin-top:2px; cursor:pointer;
+  }
+  .detailStopMeta{display:flex; align-items:center; gap:8px; margin-bottom:12px; color:var(--muted); font-size:12.5px;}
+
+  /* ===== Nav screen ===== */
+  #navScreen .sheetBody{padding:18px 18px 30px;}
+  .navStepList{position:relative; padding-left:26px;}
+  .navStep{position:relative; padding-bottom:26px;}
+  .navStep:last-child{padding-bottom:0;}
+  .navStep::before{
+    content:""; position:absolute; left:-26px; top:4px; width:14px; height:14px;
+    border-radius:50%; background:var(--blue); border:3px solid #fff; box-shadow:0 0 0 2px var(--blue);
+  }
+  .navStep::after{
+    content:""; position:absolute; left:-20px; top:20px; bottom:-4px; width:2px;
+    background:var(--line);
+  }
+  .navStep:last-child::after{display:none;}
+  .navStep:last-child::before{background:var(--green); box-shadow:0 0 0 2px var(--green);}
+  .navStep .stepLabel{font-size:11px; color:var(--muted); margin-bottom:2px;}
+  .navStep .stepMain{font-size:17px; font-weight:800; line-height:1.4;}
+  .navStep .stepSub{font-size:13px; color:var(--muted); margin-top:2px;}
+  .navBoardBadge{
+    display:inline-flex; align-items:center; gap:6px; margin-top:6px;
+    background:#eef7f1; color:var(--green); font-weight:800; font-size:13px;
+    padding:5px 10px; border-radius:8px;
+  }
+  .navEmpty{text-align:center; padding:40px 10px; color:var(--muted);}
+  .navEmpty .bigIcon{font-size:40px; margin-bottom:10px;}
+
+  /* ===== History / Settings ===== */
+  .historyItem{
+    display:flex; align-items:center; gap:10px; padding:12px 4px;
+    border-bottom:1px solid var(--line); cursor:pointer;
+  }
+  .historyItem .ic{color:var(--muted); font-size:16px;}
+  .historyItem .name{flex:1; font-size:14.5px; font-weight:600;}
+  .historyItem .time{font-size:11px; color:var(--muted);}
+  .emptyState{text-align:center; color:var(--muted); padding:40px 10px; font-size:13.5px;}
+
+  .settingRow{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 2px; border-bottom:1px solid var(--line);
+  }
+  .settingRow .label{font-size:14.5px;}
+  .settingRow .sub{font-size:11.5px;color:var(--muted); margin-top:2px;}
+  .switch{
+    position:relative; width:46px; height:26px; flex:none;
+  }
+  .switch input{opacity:0; width:0; height:0;}
+  .slider{
+    position:absolute; inset:0; background:#ccd3da; border-radius:14px; cursor:pointer; transition:.2s;
+  }
+  .slider::before{
+    content:""; position:absolute; width:20px; height:20px; left:3px; top:3px;
+    background:#fff; border-radius:50%; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,0.3);
+  }
+  input:checked + .slider{background:var(--green);}
+  input:checked + .slider::before{transform:translateX(20px);}
+
+  /* Leaflet custom pin */
+  .busPin{
+    width:26px;height:26px;border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,0.35);
+    border:2px solid #fff;
+  }
+  .busPin span{transform:rotate(45deg); font-size:12px; color:#fff;}
+  .meDot{
+    width:18px;height:18px;border-radius:50%;
+    background:var(--blue); border:3px solid #fff; box-shadow:0 0 0 4px rgba(21,94,156,0.28);
+  }
+
+  .toast{
+    position:fixed; left:50%; bottom:calc(var(--nav-h) + 18px); transform:translateX(-50%);
+    background:rgba(20,30,40,0.92); color:#fff; padding:10px 18px; border-radius:20px;
+    font-size:13px; z-index:1200; box-shadow:var(--shadow);
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================== TOP BAR ===================== -->
+  <div id="topbar">
+    <div id="brandRow">
+      <div class="logo">🚌</div>
+      <div class="brandText">バスナビ</div>
+      <div class="place" id="placeLabel">津和野町</div>
+    </div>
+    <div id="searchRow">
+      <input id="searchBox" type="text" placeholder="行き先を入力（例：役場、駅、道の駅）" autocomplete="off" />
+      <button class="iconBtn" id="clearSearchBtn" title="検索クリア">✕</button>
+      <div id="suggestBox"></div>
+    </div>
+    <div class="shortcutRow" id="shortcutRow"></div>
+  </div>
+
+  <!-- ===================== MAP ===================== -->
+  <div id="mapWrap">
+    <div id="map"></div>
+    <button class="locateBtn" id="locateBtn" title="現在地を再取得">📍</button>
+
+    <div id="nearestCard" style="display:none;">
+      <div class="pin">🚏</div>
+      <div class="body">
+        <div class="label">最寄りバス停</div>
+        <div class="stopName" id="nearestName">-</div>
+        <div class="walk" id="nearestWalk">-</div>
+      </div>
+      <div class="chev">›</div>
+    </div>
+
+    <div id="navCta">
+      <div class="icon">🧭</div>
+      <div class="body">
+        <div class="t1">目的地までのナビ</div>
+        <div class="t2" id="navCtaText">-</div>
+      </div>
+      <div class="clearX" id="navCtaClear">✕</div>
+    </div>
+  </div>
+
+  <!-- ===================== BOTTOM NAV ===================== -->
+  <nav id="bottomNav">
+    <button class="navItem active" data-tab="map"><span class="ic">🗺️</span>地図</button>
+    <button class="navItem" data-tab="search"><span class="ic">🔍</span>検索</button>
+    <button class="navItem" data-tab="history"><span class="ic">🕘</span>履歴</button>
+    <button class="navItem" data-tab="settings"><span class="ic">⚙️</span>設定</button>
+  </nav>
+</div>
+
+<!-- ===================== OVERLAY ===================== -->
+<div class="overlay" id="overlay"></div>
+
+<!-- ===================== DETAIL SHEET ===================== -->
+<div class="sheet" id="detailSheet">
+  <div class="sheetHandle"></div>
+  <div class="sheetHeader">
+    <h2 id="detailTitle">バス停</h2>
+    <button class="sheetClose" data-close>✕</button>
+  </div>
+  <div class="sheetBody" id="detailBody"></div>
+</div>
+
+<!-- ===================== SEARCH SHEET ===================== -->
+<div class="sheet" id="searchSheet">
+  <div class="sheetHandle"></div>
+  <div class="sheetHeader">
+    <h2>行き先を検索</h2>
+    <button class="sheetClose" data-close>✕</button>
+  </div>
+  <div class="sheetBody">
+    <div id="searchRow2" style="display:flex;gap:8px;margin-bottom:12px;">
+      <input id="searchBox2" type="text" placeholder="行き先を入力（部分一致でOK）" autocomplete="off"
+        style="flex:1;padding:12px 14px;border-radius:12px;border:1px solid var(--line);font-size:15px;outline:none;" />
+    </div>
+    <div class="shortcutRow" id="shortcutRow2" style="margin-bottom:14px;"></div>
+    <div id="searchResults2"></div>
+  </div>
+</div>
+
+<!-- ===================== NAV SCREEN ===================== -->
+<div class="sheet fullscreen" id="navScreen">
+  <div class="sheetHeader">
+    <h2>ナビ</h2>
+    <button class="sheetClose" data-close>✕</button>
+  </div>
+  <div class="sheetBody" id="navBody"></div>
+</div>
+
+<!-- ===================== HISTORY SHEET ===================== -->
+<div class="sheet" id="historySheet">
+  <div class="sheetHandle"></div>
+  <div class="sheetHeader">
+    <h2>検索履歴</h2>
+    <button class="sheetClose" data-close>✕</button>
+  </div>
+  <div class="sheetBody" id="historyBody"></div>
+</div>
+
+<!-- ===================== SETTINGS SHEET ===================== -->
+<div class="sheet" id="settingsSheet">
+  <div class="sheetHandle"></div>
+  <div class="sheetHeader">
+    <h2>設定</h2>
+    <button class="sheetClose" data-close>✕</button>
+  </div>
+  <div class="sheetBody">
+    <div class="settingRow">
+      <div>
+        <div class="label">GPSを自動取得</div>
+        <div class="sub">起動時に現在地を自動取得します</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="autoGpsToggle" checked><span class="slider"></span></label>
+    </div>
+    <div class="settingRow">
+      <div>
+        <div class="label">高精度モード</div>
+        <div class="sub">GPS取得の精度を優先（バッテリー消費増）</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="highAccToggle" checked><span class="slider"></span></label>
+    </div>
+    <div class="settingRow" style="border-bottom:none;">
+      <div>
+        <div class="label">データ提供</div>
+        <div class="sub">停留所・時刻表データ（Supabase）</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+//=====================================================
+// 設定・定数
+//=====================================================
+const supabaseUrl = "https://zyvpzobykvuscxuhsrad.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp5dnB6b2J5a3Z1c2N4dWhzcmFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3OTE0NTAsImV4cCI6MjA4NTM2NzQ1MH0.Z2cKv3VSlk3iibQl7ldwcff9WF5cBHTZkcrdvxA2Bbk";
+const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey, {
+  auth: { persistSession: false, detectSessionInUrl: false }
+});
+
+const DEFAULT_CENTER = [34.4521, 131.764]; // 津和野町中心付近
+const WALK_M_PER_MIN = 65; // 徒歩速度の目安（分速65m）
+const SHORTCUTS = ["役場", "津和野駅", "日原駅", "道の駅"];
+
+const ROUTE_COLORS = [
+  "#155e9c","#e07a1f","#1c9a5b","#a23bd6","#caa23a",
+  "#2aa7c9","#c9435a","#5c7ca8","#8a6d2f","#3f9b6f",
+  "#9c4f9c","#c96a2a","#4a7fbf","#b53d63","#3fa0a0",
+  "#7a8c3f","#d18b3d","#6d5ac9"
+];
+
+//=====================================================
+// 状態
+//=====================================================
+let map, currentMarker, nearestMarker, destMarker, routeLine;
+let myPos = null;                  // {lat,lng}
+let stopsList = [];                // [{key, stop_name, lat, lng, routes:[{route,direction,timetable}]}]
+let tripMap = new Map();           // "route|direction|trip_N" -> [{stop_name,lat,lng,order,time,active}]
+let tripDestinationMap = new Map();// "route|direction|trip_N" -> 終点停留所名
+let routeColorMap = new Map();     // route_name -> color
+let stopMarkers = [];              // leaflet markers
+let nearestStop = null;
+let destinationStop = null;        // {key,stop_name,lat,lng} 検索で選んだ目的地（バス停）
+let searchHistory = [];            // セッション内履歴 [{name,time}]
+let autoGps = true;
+let highAcc = true;
+
+//=====================================================
+// ユーティリティ
+//=====================================================
+function distance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function normalizeTimes(times){
+  if (!times) return [];
+  if (Array.isArray(times)) return times;
+  return String(times).split(",");
+}
+function minutesUntil(timeStr){
+  const parts = String(timeStr).split(":");
+  if (parts.length !== 2) return null;
+  const h = Number(parts[0]), m = Number(parts[1]);
+  if (isNaN(h) || isNaN(m)) return null;
+  const now = new Date();
+  const t = new Date();
+  t.setHours(h, m, 0, 0);
+  return (t - now) / 60000;
+}
+function nextBusInfo(times){
+  times = normalizeTimes(times);
+  let min = Infinity, next = "", idx = -1;
+  times.forEach((t, i) => {
+    const diff = minutesUntil(t);
+    if (diff !== null && diff > 0 && diff < min) { min = diff; next = t; idx = i; }
+  });
+  return { time: next || "本日終了", min: isFinite(min) ? Math.round(min) : null, index: idx };
+}
+function walkInfo(meters){
+  const min = Math.max(1, Math.round(meters / WALK_M_PER_MIN));
+  const distText = meters < 1000 ? `徒歩${Math.round(meters)}m` : `徒歩${(meters/1000).toFixed(1)}km`;
+  return { distText, timeText: `約${min}分`, min };
+}
+function colorForRoute(route){
+  if (!routeColorMap.has(route)) {
+    routeColorMap.set(route, ROUTE_COLORS[routeColorMap.size % ROUTE_COLORS.length]);
+  }
+  return routeColorMap.get(route);
+}
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(showToast._tm);
+  showToast._tm = setTimeout(() => t.classList.remove("show"), 2200);
+}
+function pinIcon(color, glyph){
+  return L.divIcon({
+    className: "",
+    html: `<div class="busPin" style="background:${color}"><span>${glyph}</span></div>`,
+    iconSize: [26,26],
+    iconAnchor: [13,26],
+    popupAnchor: [0,-24]
+  });
+}
+function meIcon(){
+  return L.divIcon({ className:"", html:`<div class="meDot"></div>`, iconSize:[18,18], iconAnchor:[9,9] });
+}
+
+//=====================================================
+// 地図初期化
+//=====================================================
+map = L.map("map", { zoomControl: false }).setView(DEFAULT_CENTER, 14);
+L.control.zoom({ position: "bottomleft" }).addTo(map);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: "&copy; OpenStreetMap contributors"
+}).addTo(map);
+
+//=====================================================
+// データ読み込み
+//=====================================================
+async function loadStops(){
+  const { data, error } = await supabaseClient.from("bus_stops").select("*");
+  if (error) {
+    console.error(error);
+    showToast("データの取得に失敗しました");
+    return;
+  }
+
+  const stopKeyMap = new Map();
+  const tMap = new Map();
+
+  data.forEach(s => {
+    const lat = Number(s.lat), lng = Number(s.lng);
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    const stopKey = `${s.stop_name}|${lat}|${lng}`;
+    if (!stopKeyMap.has(stopKey)) {
+      stopKeyMap.set(stopKey, { key: stopKey, stop_name: s.stop_name, lat, lng, routes: [] });
+    }
+    stopKeyMap.get(stopKey).routes.push({ route: s.route_name, direction: s.direction, timetable: s.timetable });
+
+    const times = normalizeTimes(s.timetable);
+    times.forEach((time, idx) => {
+      const tripKey = `${s.route_name}|${s.direction}|trip_${idx}`;
+      if (!tMap.has(tripKey)) tMap.set(tripKey, []);
+      tMap.get(tripKey).push({
+        stop_name: s.stop_name, lat, lng,
+        order: Number(s.order_no) || 0,
+        time,
+        active: !!time && time !== "null"
+      });
+    });
+  });
+
+  // 便ごとに order でソートし、終点を確定
+  tMap.forEach((points, key) => {
+    points.sort((a,b) => a.order - b.order);
+  });
+
+  stopsList = Array.from(stopKeyMap.values());
+  tripMap = tMap;
+
+  tripMap.forEach((points, key) => {
+    const active = points.filter(p => p.active);
+    if (active.length === 0) return;
+    tripDestinationMap.set(key, active[active.length - 1].stop_name);
+  });
+
+  renderShortcuts();
+  renderAllMarkers();
+}
+
+//=====================================================
+// マーカー描画
+//=====================================================
+function renderAllMarkers(){
+  stopMarkers.forEach(m => map.removeLayer(m));
+  stopMarkers = [];
+
+  stopsList.forEach(stop => {
+    let color = "#2b7cff", glyph = "";
+    if (nearestStop && stop.key === nearestStop.key) { color = "#e0405a"; glyph = ""; }
+    if (destinationStop && stop.key === destinationStop.key) { color = "#1c9a5b"; glyph = ""; }
+
+    const marker = L.marker([stop.lat, stop.lng], { icon: pinIcon(color, "") }).addTo(map);
+    marker.on("click", () => openDetail(stop.key));
+    stopMarkers.push(marker);
+  });
+}
+
+function refreshCurrentAndNearest(){
+  if (!myPos) return;
+
+  if (currentMarker) map.removeLayer(currentMarker);
+  currentMarker = L.marker([myPos.lat, myPos.lng], { icon: meIcon() }).addTo(map).bindPopup("現在地");
+
+  // 最寄りバス停
+  let best = null, bestDist = Infinity;
+  stopsList.forEach(s => {
+    const d = distance(myPos.lat, myPos.lng, s.lat, s.lng);
+    if (d < bestDist) { bestDist = d; best = s; }
+  });
+  nearestStop = best;
+
+  if (nearestStop) {
+    const w = walkInfo(bestDist);
+    document.getElementById("nearestName").textContent = nearestStop.stop_name;
+    document.getElementById("nearestWalk").textContent = `${w.distText}・${w.timeText}`;
+    document.getElementById("nearestCard").style.display = "flex";
+  }
+
+  renderAllMarkers();
+  drawRouteLineIfNeeded();
+}
+
+function drawRouteLineIfNeeded(){
+  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+  if (myPos && destinationStop) {
+    routeLine = L.polyline(
+      [[myPos.lat, myPos.lng, ], [destinationStop.lat, destinationStop.lng]],
+      { color: "#1c9a5b", weight: 3, dashArray: "6,8", opacity: 0.8 }
+    ).addTo(map);
+  }
+}
+
+//=====================================================
+// GPS
+//=====================================================
+function locate(){
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      myPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      map.setView([myPos.lat, myPos.lng], 15);
+      refreshCurrentAndNearest();
+    },
+    () => {
+      showToast("GPSを取得できませんでした。町の中心地を表示します。");
+      myPos = { lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1] };
+      map.setView(DEFAULT_CENTER, 14);
+      refreshCurrentAndNearest();
+    },
+    { enableHighAccuracy: highAcc, timeout: 10000 }
+  );
+}
+document.getElementById("locateBtn").onclick = locate;
+
+//=====================================================
+// 詳細画面（バス停タップ）
+//=====================================================
+function openDetail(stopKey){
+  const stop = stopsList.find(s => s.key === stopKey);
+  if (!stop) return;
+
+  document.getElementById("detailTitle").textContent = stop.stop_name;
+
+  let metaHtml = "";
+  if (myPos) {
+    const d = distance(myPos.lat, myPos.lng, stop.lat, stop.lng);
+    const w = walkInfo(d);
+    metaHtml = `<div class="detailStopMeta">📍 現在地から ${w.distText}（${w.timeText}）</div>`;
+  }
+
+  let cardsHtml = "";
+  stop.routes.forEach(r => {
+    const color = colorForRoute(r.route);
+    const next = nextBusInfo(r.timetable);
+    const times = normalizeTimes(r.timetable);
+    const tripKey = `${r.route}|${r.direction}|trip_${next.index}`;
+    const dest = next.index >= 0 ? (tripDestinationMap.get(tripKey) || "-") : "-";
+    const isPast = next.index < 0;
+
+    const chips = times.map((t, i) => {
+      const isNext = i === next.index;
+      return `<span class="ttChip ${isNext ? "next" : ""}">${t || "-"}</span>`;
+    }).join("");
+
+    cardsHtml += `
+      <div class="directionCard">
+        <div class="dHead" style="background:${color};">
+          <div class="dArrow">→</div>
+          <div class="dText">
+            <div class="dDir">${r.direction}</div>
+            <div class="dRoute">${r.route}</div>
+            ${dest !== "-" ? `<div class="dDest">終点：${dest}</div>` : ""}
+          </div>
+        </div>
+        <div class="dNext ${isPast ? "past" : ""}">
+          <div class="nTime">${next.time}</div>
+          <div class="nMin">${next.min !== null ? `あと ${next.min} 分` : ""}</div>
+        </div>
+        <div class="timetableWrap">
+          <div class="ttGrid">${chips}</div>
+        </div>
+      </div>
+    `;
+  });
+
+  const goBtn = `<button class="goHereBtn" id="goHereBtn">この停留所を目的地にしてナビ開始</button>`;
+
+  document.getElementById("detailBody").innerHTML = metaHtml + cardsHtml + goBtn;
+  document.getElementById("goHereBtn").onclick = () => {
+    setDestination(stop);
+    closeAllSheets();
+    openNavScreen();
+  };
+
+  openSheet("detailSheet");
+}
+
+//=====================================================
+// 検索（部分一致）
+//=====================================================
+function searchStops(keyword){
+  if (!keyword) return [];
+  const uniqByName = new Map();
+  stopsList
+    .filter(s => s.stop_name.includes(keyword))
+    .forEach(s => { if (!uniqByName.has(s.stop_name)) uniqByName.set(s.stop_name, s); });
+  return Array.from(uniqByName.values()).slice(0, 20);
+}
+
+function renderShortcuts(){
+  const html = SHORTCUTS.map(k => `<div class="shortcutChip" data-kw="${k}">${k}</div>`).join("");
+  document.getElementById("shortcutRow").innerHTML = html;
+  document.getElementById("shortcutRow2").innerHTML = html;
+  document.querySelectorAll("#shortcutRow .shortcutChip").forEach(el => {
+    el.onclick = () => { document.getElementById("searchBox").value = el.dataset.kw; runTopSearch(el.dataset.kw); };
+  });
+  document.querySelectorAll("#shortcutRow2 .shortcutChip").forEach(el => {
+    el.onclick = () => { document.getElementById("searchBox2").value = el.dataset.kw; runSheetSearch(el.dataset.kw); };
+  });
+}
+
+function runTopSearch(keyword){
+  const box = document.getElementById("suggestBox");
+  const results = searchStops(keyword);
+  if (!keyword) { box.classList.remove("show"); return; }
+  if (results.length === 0) {
+    box.innerHTML = `<div class="suggestEmpty">「${keyword}」に一致するバス停が見つかりません</div>`;
+  } else {
+    box.innerHTML = results.map(s => `
+      <div class="suggestItem" data-key="${s.key}">
+        <div class="dot"></div>
+        <div>
+          <div class="name">${s.stop_name}</div>
+          <div class="sub">${s.routes.map(r=>r.route).slice(0,2).join(" / ")}</div>
+        </div>
+      </div>`).join("");
+    box.querySelectorAll(".suggestItem").forEach(el => {
+      el.onclick = () => {
+        const stop = stopsList.find(s => s.key === el.dataset.key);
+        pickDestinationFromSearch(stop);
+        box.classList.remove("show");
+        document.getElementById("searchBox").value = stop.stop_name;
+      };
+    });
+  }
+  box.classList.add("show");
+}
+
+function runSheetSearch(keyword){
+  const wrap = document.getElementById("searchResults2");
+  if (!keyword) { wrap.innerHTML = ""; return; }
+  const results = searchStops(keyword);
+  if (results.length === 0) {
+    wrap.innerHTML = `<div class="emptyState">「${keyword}」に一致するバス停が見つかりません</div>`;
+    return;
+  }
+  wrap.innerHTML = results.map(s => `
+    <div class="historyItem" data-key="${s.key}">
+      <div class="ic">🚏</div>
+      <div class="name">${s.stop_name}</div>
+    </div>`).join("");
+  wrap.querySelectorAll(".historyItem").forEach(el => {
+    el.onclick = () => {
+      const stop = stopsList.find(s => s.key === el.dataset.key);
+      pickDestinationFromSearch(stop);
+      closeAllSheets();
+      openNavScreen();
+    };
+  });
+}
+
+function pickDestinationFromSearch(stop){
+  if (!stop) return;
+  setDestination(stop);
+  addHistory(stop.stop_name);
+  showToast(`目的地を「${stop.stop_name}」に設定しました`);
+}
+
+function setDestination(stop){
+  destinationStop = stop;
+  renderAllMarkers();
+  drawRouteLineIfNeeded();
+  document.getElementById("navCtaText").textContent = stop.stop_name;
+  document.getElementById("navCta").classList.add("show");
+  document.getElementById("nearestCard").style.display = myPos ? "none" : "none";
+  if (myPos) map.fitBounds([[myPos.lat,myPos.lng],[stop.lat,stop.lng]], { padding:[60,60] });
+}
+
+function clearDestination(){
+  destinationStop = null;
+  renderAllMarkers();
+  drawRouteLineIfNeeded();
+  document.getElementById("navCta").classList.remove("show");
+  if (nearestStop) document.getElementById("nearestCard").style.display = "flex";
+}
+
+document.getElementById("searchBox").addEventListener("input", e => runTopSearch(e.target.value.trim()));
+document.getElementById("searchBox2").addEventListener("input", e => runSheetSearch(e.target.value.trim()));
+document.getElementById("clearSearchBtn").onclick = () => {
+  document.getElementById("searchBox").value = "";
+  document.getElementById("suggestBox").classList.remove("show");
+  clearDestination();
+};
+document.getElementById("navCtaClear").onclick = (e) => { e.stopPropagation(); clearDestination(); };
+document.getElementById("navCta").addEventListener("click", (e) => {
+  if (e.target.id === "navCtaClear") return;
+  openNavScreen();
+});
+document.getElementById("nearestCard").onclick = () => { if (nearestStop) openDetail(nearestStop.key); };
+
+//=====================================================
+// 履歴
+//=====================================================
+function addHistory(name){
+  searchHistory = searchHistory.filter(h => h.name !== name);
+  searchHistory.unshift({ name, time: new Date() });
+  searchHistory = searchHistory.slice(0, 20);
+  renderHistory();
+}
+function renderHistory(){
+  const body = document.getElementById("historyBody");
+  if (searchHistory.length === 0) {
+    body.innerHTML = `<div class="emptyState">まだ検索履歴がありません<br>行き先を検索すると、ここに表示されます</div>`;
+    return;
+  }
+  body.innerHTML = searchHistory.map(h => `
+    <div class="historyItem" data-name="${h.name}">
+      <div class="ic">🕘</div>
+      <div class="name">${h.name}</div>
+      <div class="time">${h.time.getHours()}:${String(h.time.getMinutes()).padStart(2,"0")}</div>
+    </div>`).join("");
+  body.querySelectorAll(".historyItem").forEach(el => {
+    el.onclick = () => {
+      const stop = stopsList.find(s => s.stop_name === el.dataset.name);
+      if (stop) { pickDestinationFromSearch(stop); closeAllSheets(); switchTab("map"); }
+    };
+  });
+}
+
+//=====================================================
+// ナビ画面（現在地 → 最寄り停留所 → 目的地）
+//=====================================================
+function findBestTrip(fromStopName, toStopName){
+  let best = null;
+  tripMap.forEach((points, key) => {
+    const active = points.filter(p => p.active);
+    const fromIdx = active.findIndex(p => p.stop_name === fromStopName);
+    const toIdx = active.findIndex(p => p.stop_name === toStopName);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx >= toIdx) return;
+
+    const boardPoint = points.find(p => p.stop_name === fromStopName);
+    const diff = minutesUntil(boardPoint.time);
+    if (diff === null || diff <= 0) return;
+
+    const [route, direction] = key.split("|");
+    const candidate = {
+      route, direction,
+      boardTime: boardPoint.time,
+      minUntil: Math.round(diff),
+      stopsBetween: toIdx - fromIdx,
+      alightStop: toStopName,
+      destination: tripDestinationMap.get(key) || toStopName
+    };
+    if (!best || candidate.minUntil < best.minUntil) best = candidate;
+  });
+  return best;
+}
+
+function openNavScreen(){
+  const body = document.getElementById("navBody");
+
+  if (!destinationStop) {
+    body.innerHTML = `<div class="navEmpty"><div class="bigIcon">🧭</div>行き先を検索して選んでください</div>`;
+    openSheet("navScreen", true);
+    return;
+  }
+  if (!nearestStop) {
+    body.innerHTML = `<div class="navEmpty"><div class="bigIcon">📍</div>現在地を取得できていません。<br>地図画面で位置情報を許可してください</div>`;
+    openSheet("navScreen", true);
+    return;
+  }
+
+  const walkD = myPos ? distance(myPos.lat, myPos.lng, nearestStop.lat, nearestStop.lng) : 0;
+  const w = walkInfo(walkD);
+
+  const trip = findBestTrip(nearestStop.stop_name, destinationStop.stop_name);
+
+  let html = `<div class="navStepList">`;
+
+  html += `
+    <div class="navStep">
+      <div class="stepLabel">現在地</div>
+      <div class="stepMain">あなたは ${nearestStop.stop_name} の近くにいます</div>
+      <div class="stepSub">${myPos ? `${w.distText}・徒歩${w.timeText}` : ""}</div>
+    </div>`;
+
+  if (trip) {
+    const color = colorForRoute(trip.route);
+    html += `
+      <div class="navStep">
+        <div class="stepLabel">乗車</div>
+        <div class="stepMain">${nearestStop.stop_name} から乗車</div>
+        <div class="navBoardBadge" style="background:${color}22;color:${color};">→ ${trip.direction}（${trip.route}）</div>
+        <div class="stepSub">発車 ${trip.boardTime}（あと${trip.minUntil}分）</div>
+      </div>
+      <div class="navStep">
+        <div class="stepLabel">降車</div>
+        <div class="stepMain">${trip.stopsBetween}駅先で降車</div>
+        <div class="stepSub">${trip.alightStop} で降ります</div>
+      </div>
+      <div class="navStep">
+        <div class="stepLabel">到着</div>
+        <div class="stepMain">目的地「${destinationStop.stop_name}」に到着</div>
+      </div>`;
+  } else {
+    html += `
+      <div class="navStep">
+        <div class="stepLabel">乗車ルート</div>
+        <div class="stepMain">直通の便が見つかりませんでした</div>
+        <div class="stepSub">乗り換えが必要な可能性があります。現地バス停の時刻表もご確認ください。</div>
+      </div>
+      <div class="navStep">
+        <div class="stepLabel">到着</div>
+        <div class="stepMain">目的地「${destinationStop.stop_name}」</div>
+      </div>`;
+  }
+
+  html += `</div>`;
+  body.innerHTML = html;
+  openSheet("navScreen", true);
+}
+
+//=====================================================
+// シート（下部パネル）共通制御
+//=====================================================
+const overlay = document.getElementById("overlay");
+function openSheet(id, fullscreen){
+  closeAllSheets(true);
+  const el = document.getElementById(id);
+  el.classList.add("show");
+  overlay.classList.add("show");
+}
+function closeAllSheets(keepOverlay){
+  document.querySelectorAll(".sheet").forEach(s => s.classList.remove("show"));
+  if (!keepOverlay) overlay.classList.remove("show");
+}
+overlay.addEventListener("click", () => closeAllSheets());
+document.querySelectorAll("[data-close]").forEach(btn => {
+  btn.addEventListener("click", () => closeAllSheets());
+});
+
+//=====================================================
+// 下部固定メニュー（タブ切替）
+//=====================================================
+function switchTab(tab){
+  document.querySelectorAll(".navItem").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  closeAllSheets();
+  if (tab === "search") { openSheet("searchSheet"); document.getElementById("searchBox2").focus(); }
+  else if (tab === "history") { renderHistory(); openSheet("historySheet"); }
+  else if (tab === "settings") { openSheet("settingsSheet"); }
+  // "map" はシートを閉じるだけ
+}
+document.querySelectorAll(".navItem").forEach(btn => {
+  btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+});
+
+//=====================================================
+// 設定
+//=====================================================
+document.getElementById("autoGpsToggle").addEventListener("change", e => { autoGps = e.target.checked; });
+document.getElementById("highAccToggle").addEventListener("change", e => { highAcc = e.target.checked; });
+
+//=====================================================
+// 起動
+//=====================================================
+window.onerror = function(msg, url, line){
+  console.log("JS ERROR", msg, line);
+};
+
+(async function init(){
+  await loadStops();
+  if (autoGps) locate();
+})();
+</script>
+</body>
+</html>
