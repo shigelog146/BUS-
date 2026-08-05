@@ -21,8 +21,9 @@
     --soft:#efeee9;
     --accent:#1b1c1e;      /* モノクロ基調のプライマリカラー */
     --accent-2:#3a3b3f;
-    --nearest:#bf4038;     /* 最寄り＝機能上必要な色分けのみ */
-    --dest:#2f8657;        /* 目的地＝機能上必要な色分けのみ */
+    --stop:#2f6fed;        /* 通常のバス停＝視認性重視の鮮やかな青 */
+    --nearest:#e3383f;     /* 最寄り＝視認性重視の鮮やかな赤 */
+    --dest:#1fa463;        /* 目的地＝視認性重視の鮮やかな緑 */
     --radius:14px;
     --radius-sm:10px;
     --shadow:0 8px 24px rgba(20,20,20,0.10);
@@ -112,7 +113,8 @@
 
   /* ===== Map ===== */
   #mapWrap{flex:1;position:relative;min-height:0;}
-  #map{position:absolute;inset:0; filter:saturate(0.85);}
+  #map{position:absolute;inset:0;}
+  .leaflet-tile-pane{filter:saturate(0.5) brightness(1.05);}
 
   .locateBtn{
     position:absolute; right:12px; bottom:12px; z-index:400;
@@ -294,8 +296,8 @@
 
   /* Leaflet custom pin */
   .busPin{
-    width:15px;height:15px;border-radius:50%;
-    border:2.5px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,0.35);
+    width:17px;height:17px;border-radius:50%;
+    border:2.5px solid #fff; box-shadow:0 1px 5px rgba(0,0,0,0.4);
   }
   .meDot{width:16px;height:16px;border-radius:50%; background:var(--ink); border:3px solid #fff; box-shadow:0 0 0 4px rgba(27,28,30,0.22);}
 
@@ -560,7 +562,7 @@ function applyLanguage(){
   document.getElementById("langToggleLabel").textContent = lang === "ja" ? "EN" : "JA";
   renderShortcuts();
   if (nearestStop) refreshNearestCardText();
-  if (destinationStop) document.getElementById("navCtaText").textContent = destinationStop.stop_name;
+  if (destinationStop) document.getElementById("navCtaText").textContent = displayStopName(destinationStop.stop_name);
   closeAllSheets();
 }
 document.getElementById("langToggle").addEventListener("click", () => {
@@ -587,11 +589,14 @@ const SHORTCUTS = [
   { ja:"道の駅", en:"Roadside Sta." }
 ];
 
+const ROMAJI = {"はざま橋":"Hazama Hashi","やなぎ会館":"Yanagi Kaikan","カントリー入口":"Kantorii Iriguchi","カンネオ":"Kanneo","一の谷口":"Ichi No Taniguchi","万瀬":"Man Se","三歩市":"San Ho Shi","三歩市上":"San Ho Shijou","三谷駅入口":"Mitani Eki Iriguchi","上杉":"Uesugi","上横道":"Ue Yokomichi","上高野":"Ue Takano","下奥ケ野":"Shita Oku Ke No","下徳次":"Shita Tokuji","下横道":"Shita Yokomichi","下組":"Shitagumi","下青原":"Shita Aohara","下高野":"Shimotakano","中内谷口":"Nakauchi Taniguchi","中原":"Nakahara","中川":"Nakagawa","中川上":"Nakagawa Ue","中座会館前":"Chuuza Kaikan Mae","中座１":"Chuuza 1","中組":"Naka Kumi","中間組":"Chuukan Kumi","二俣中央":"Futamata Chuuou","二俣公民館":"Futamata Kouminkan","二俣口":"Futamata Kuchi","今市通口":"Imaichi Toori Kuchi","休":"Kyuu","元郷":"Motogou","公民館前":"Kouminkan Mae","共存病院":"Kyouzon Byouin","共存病院前":"Kyouzon Byouin Mae","円の谷":"En No Tani","口屋橋":"Kuchi Ya Hashi","吉ケ原":"Kichi Ke Hara","吉ヶ原":"Kichi Ke Hara","吉部":"Kichibu","吹野上":"Fukino Ue","吹野下":"Fukino Shita","商人センター":"Shounin Sentaa","商工会前":"Shoukou Kai Mae","喜時雨":"Ki Shigure","四本松":"Yonhon Matsu","土井敷団地前":"Tsuchii Shiki Danchi Mae","土木事務所前":"Doboku Jimusho Mae","土木事業所前":"Doboku Jigyousho Mae","地域センター前":"Chiiki Sentaa Mae","堀庭園":"Hori Teien","堤溢":"Tsutsumi Itsu","堤田下":"Tsutsumida Shita","堤田公民館":"Tsutsumida Kouminkan","夕河内":"Yuu Kawauchi","大木上":"Taiboku Ue","大木下":"Taiboku Shita","大畠":"Oohata","奥ケ野":"Oku Ke No","奧ケ野":"Oku Ke No","宮ノ前":"Miya No Mae","宿の谷上":"Yado No Tanigami","宿の谷下":"Yado No Tani Shita","小倉谷口":"Ogura Taniguchi","小川溢":"Ogawa Itsu","小床":"Shou Toko","小床向上":"Shou Toko Koujou","小床向下":"Shou Toko Kou Shita","小瀬":"Oze","小瀬会館":"Oze Kaikan","小瀬会館前":"Oze Kaikan Mae","小田城":"Oda Shiro","小直":"Shou Choku","小郷":"Ogou","小野":"Ono","山入":"Yama Nyuu","岩倉":"Iwakura","岩川":"Iwakawa","川尻口":"Kawajiri Kuchi","左鐙":"Hidari Abumi","市尾":"Ichinoo","平野":"Heiya","幸町":"Saiwaichou","役場前":"Yakuba Mae","徳佐駅入口":"Tokusa Eki Iriguchi","徳次":"Tokuji","徳次中":"Tokuji Naka","惣田":"Sou Ta","戦":"Sen","掘割":"Horiwari","新左鐙橋":"Shinza Abumi Hashi","新橋":"Shinbashi","新畑":"Shinhata","日原":"Nichihara","日原保育園":"Nichihara Hoikuen","日原駅":"Nichihara Eki","日浦口":"Hiura Kuchi","旧畑迫病院前":"Kyuu Hatake Sako Byouin Mae","春日":"Kasuga","晩越":"Ban Etsu","曲がり角":"Magari Kaku","木の口上":"Ki No Koujou","木尾谷":"Ki Otani","木尾谷口":"Ki Otani Kuchi","木部保育園前":"Mokubu Hoikuen Mae","木部公民館前":"Mokubu Kouminkan Mae","本町入口":"Honchou Iriguchi","東善寺前":"Higashi Zen Teramae","東殿町":"Higashi Tonomachi","東萩駅":"Higashi Hagi Eki","東萩駅①":"Higashi Hagi Eki ①","東青原駅前":"Higashi Aohara Ekimae","松陰神社":"Shouin Jinja","枕瀬":"Makura Se","森":"Mori","椛井谷口":"Kaba Itani Kuchi","榊地蔵前":"Sakaki Jizou Mae","横瀬":"Yokose","殿町":"Tonomachi","池村":"Ikemura","津和野バスセンター":"Tsuwano Basusentaa","津和野温泉":"Tsuwano Onsen","津和野駅":"Tsuwano Eki","津和野高校":"Tsuwano Koukou","添谷公民館前":"Soeya Kouminkan Mae","添谷橋":"Soeya Hashi","清水":"Shimizu","滝ノ上":"Taki No Ue","滝元":"Takimoto","牧ケ野":"Maki Ke No","犬戻し":"Inu Modoshi","瓜生口":"Uryuu Kuchi","生雲":"Ikumo","田代":"Tashiro","田屋組":"Taya Kumi","町田":"Machida","畑":"Hatake","畑ケ迫":"Hatake Ke Sako","畑迫住宅前":"Hatake Sako Juutakumae","畳":"Tatami","病院前":"Byouin Mae","白井":"Shirai","白井下":"Shirai Shita","相撲ヶ原":"Sumou Ke Hara","相撲ヶ原上":"Sumou Ke Hara Ue","矢折":"Ya Ori","石川前":"Ishikawa Mae","祇園丁":"Gion Chou","福谷口":"Fukutani Kuchi","程彼三叉路":"Hodogan Sansaro","程野":"Hodono","稲成下":"Ine Sei Shita","笹ケ峠":"Sasa Ke Touge","絵師口":"Eshi Kuchi","絵師尻":"Eshi Shiri","脇本上":"Wakimoto Ue","脇本下":"Wakimoto Shita","脇本中":"Wakimoto Naka","舟板":"Funaita","萩バスセンター":"Hagi Basusentaa","萩バスセンター①":"Hagi Basusentaa ①","西光寺前":"Saikou Teramae","西谷出合":"Nishitani Deai","診療所（国道）":"Shinryoujo Kokudou","諸鹿口":"Sho Shika Kuchi","豊稼上":"Yutaka Ka Ue","豊稼下":"Yutaka Ka Shita","豊稼会館前":"Yutaka Ka Kaikan Mae","赤木口":"Akagi Kuchi","道の駅":"Michi No Eki","郷土館前":"Kyoudo Tatemae","野中上":"Nonaka Ue","野中下":"Nonaka Shita","野口":"Noguchi","野地下":"Noji Shita","金見町上":"Kin Ken Machi Ue","金見町下":"Kin Ken Machi Shita","長嶺建設前":"Nagamine Kensetsu Mae","長野":"Nagano","門林":"Monbayashi","門林集会所":"Monbayashi Shuukaijo","集会所前":"Shuukaijo Mae","集議谷":"Shuu Gi Tani","青原駅":"Aohara Eki","須川元郷":"Sugawa Motogou","須川口":"Sugawa Kuchi","須川小学校前":"Sugawa Shougakkou Mae","須田小学校前":"Suda Shougakkou Mae","願成就温泉":"Ganjou Shuu Onsen","風呂屋橋":"Furoya Hashi","風呂屋橋南":"Furoya Kyounan","高峯":"Kouhou","高田":"Takada","鳥井":"Torii","鷗外旧居":"Ougai Kyuukyo","鷲原":"Washi Hara","鷲原公園前":"Washi Hara Kouenmae","鹿谷":"Shikatani"};
+function displayStopName(name){ return (lang==="en" && ROMAJI[name]) ? `${name} (${ROMAJI[name]})` : name; }
+
 const ROUTE_COLORS = [
-  "#3a5a78","#a15b2e","#3d7a55","#7a4a8a","#a68a2e",
-  "#2f7d8c","#a1495a","#5a6a8a","#7a6a3a","#3f7a6a",
-  "#7a4a72","#a1622e","#3a5a99","#8a3a5a","#3a8a8a",
-  "#5f6f2e","#a1722e","#5a4aa1"
+  "#2f6fed","#e2792a","#1fa463","#9b3fd1","#d1a62a",
+  "#1fa1c9","#d1454f","#5a72c9","#a67a2a","#2a9b7a",
+  "#b03fa6","#c96a2a","#3a72c9","#a13f6a","#3aa1a1",
+  "#7a9b2a","#c9822a","#6a4ad1"
 ];
 
 //=====================================================
@@ -662,7 +667,7 @@ function showToast(msg){
   showToast._tm = setTimeout(() => el.classList.remove("show"), 2200);
 }
 function pinIcon(color){
-  return L.divIcon({ className:"", html:`<div class="busPin" style="background:${color}"></div>`, iconSize:[15,15], iconAnchor:[8,8] });
+  return L.divIcon({ className:"", html:`<div class="busPin" style="background:${color}"></div>`, iconSize:[17,17], iconAnchor:[9,9] });
 }
 function meIcon(){
   return L.divIcon({ className:"", html:`<div class="meDot"></div>`, iconSize:[16,16], iconAnchor:[8,8] });
@@ -727,9 +732,9 @@ function renderAllMarkers(){
   stopMarkers.forEach(m => map.removeLayer(m));
   stopMarkers = [];
   stopsList.forEach(stop => {
-    let color = "#8c8d92";
-    if (nearestStop && stop.key === nearestStop.key) color = "#bf4038";
-    if (destinationStop && stop.key === destinationStop.key) color = "#2f8657";
+    let color = "#2f6fed";
+    if (nearestStop && stop.key === nearestStop.key) color = "#e3383f";
+    if (destinationStop && stop.key === destinationStop.key) color = "#1fa463";
     const marker = L.marker([stop.lat, stop.lng], { icon: pinIcon(color) }).addTo(map);
     marker.on("click", () => openDetail(stop.key));
     stopMarkers.push(marker);
@@ -738,7 +743,7 @@ function renderAllMarkers(){
 
 function refreshNearestCardText(){
   if (!nearestStop) return;
-  document.getElementById("nearestName").textContent = nearestStop.stop_name;
+  document.getElementById("nearestName").textContent = displayStopName(nearestStop.stop_name);
   const w = walkInfo(lastWalkMeters);
   document.getElementById("nearestWalk").textContent = `${w.distText}・${w.timeText}`;
 }
@@ -769,7 +774,7 @@ function drawRouteLineIfNeeded(){
   if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
   if (myPos && destinationStop) {
     routeLine = L.polyline([[myPos.lat, myPos.lng], [destinationStop.lat, destinationStop.lng]],
-      { color:"#2f8657", weight:3, dashArray:"5,7", opacity:0.85 }).addTo(map);
+      { color:"#1fa463", weight:3, dashArray:"5,7", opacity:0.85 }).addTo(map);
   }
 }
 
@@ -794,7 +799,7 @@ function openDetail(stopKey){
   if (!stop) return;
   currentDetailKey = stopKey;
 
-  document.getElementById("detailTitle").textContent = stop.stop_name;
+  document.getElementById("detailTitle").textContent = displayStopName(stop.stop_name);
 
   let metaHtml = "";
   if (myPos) {
@@ -821,7 +826,7 @@ function openDetail(stopKey){
           <div class="dText">
             <div class="dDir">${r.direction}</div>
             <div class="dRoute">${r.route}</div>
-            ${dest !== "-" ? `<div class="dDest">${t("terminus", dest)}</div>` : ""}
+            ${dest !== "-" ? `<div class="dDest">${t("terminus", displayStopName(dest))}</div>` : ""}
           </div>
         </div>
         <div class="dNext ${isPast ? "past" : ""}">
@@ -867,7 +872,7 @@ function runTopSearch(keyword){
     box.innerHTML = results.map(s => `
       <div class="suggestItem" data-key="${s.key}">
         ${ico("pin","icon icon-sm")}
-        <div><div class="name">${s.stop_name}</div><div class="sub">${s.routes.map(r=>r.route).slice(0,2).join(" / ")}</div></div>
+        <div><div class="name">${displayStopName(s.stop_name)}</div><div class="sub">${s.routes.map(r=>r.route).slice(0,2).join(" / ")}</div></div>
       </div>`).join("");
     box.querySelectorAll(".suggestItem").forEach(el => {
       el.onclick = () => {
@@ -886,7 +891,7 @@ function runSheetSearch(keyword){
   if (!keyword) { wrap.innerHTML = ""; return; }
   const results = searchStops(keyword);
   if (results.length === 0) { wrap.innerHTML = `<div class="emptyState">${t("emptySearch", keyword)}</div>`; return; }
-  wrap.innerHTML = results.map(s => `<div class="historyItem" data-key="${s.key}">${ico("pin","icon icon-sm ic")}<div class="name">${s.stop_name}</div></div>`).join("");
+  wrap.innerHTML = results.map(s => `<div class="historyItem" data-key="${s.key}">${ico("pin","icon icon-sm ic")}<div class="name">${displayStopName(s.stop_name)}</div></div>`).join("");
   wrap.querySelectorAll(".historyItem").forEach(el => {
     el.onclick = () => { const stop = stopsList.find(s => s.key === el.dataset.key); pickDestinationFromSearch(stop); closeAllSheets(); openNavScreen(); };
   });
@@ -896,14 +901,14 @@ function pickDestinationFromSearch(stop){
   if (!stop) return;
   setDestination(stop);
   addHistory(stop.stop_name);
-  showToast(t("toastDestSet", stop.stop_name));
+  showToast(t("toastDestSet", displayStopName(stop.stop_name)));
 }
 
 function setDestination(stop){
   destinationStop = stop;
   renderAllMarkers();
   drawRouteLineIfNeeded();
-  document.getElementById("navCtaText").textContent = stop.stop_name;
+  document.getElementById("navCtaText").textContent = displayStopName(stop.stop_name);
   document.getElementById("navCta").classList.add("show");
   document.getElementById("nearestCard").style.display = "none";
   if (myPos) map.fitBounds([[myPos.lat,myPos.lng],[stop.lat,stop.lng]], { padding:[60,60] });
@@ -942,7 +947,7 @@ function renderHistory(){
   body.innerHTML = searchHistory.map(h => `
     <div class="historyItem" data-name="${h.name}">
       ${ico("clock","icon icon-sm ic")}
-      <div class="name">${h.name}</div>
+      <div class="name">${displayStopName(h.name)}</div>
       <div class="time">${h.time.getHours()}:${String(h.time.getMinutes()).padStart(2,"0")}</div>
     </div>`).join("");
   body.querySelectorAll(".historyItem").forEach(el => {
@@ -987,7 +992,7 @@ function openNavScreen(){
   html += `
     <div class="navStep">
       <div class="stepLabel">${t("stepCurrent")}</div>
-      <div class="stepMain">${t("nearYou", nearestStop.stop_name)}</div>
+      <div class="stepMain">${t("nearYou", displayStopName(nearestStop.stop_name))}</div>
       <div class="stepSub">${myPos ? `${w.distText}・${w.timeText}` : ""}</div>
       ${myPos ? `<button class="googleNavBtn" id="googleWalkBtn">${ico("walk")}${t("googleWalkBtn")}</button>` : ""}
     </div>`;
@@ -997,18 +1002,18 @@ function openNavScreen(){
     html += `
       <div class="navStep">
         <div class="stepLabel">${t("stepBoard")}</div>
-        <div class="stepMain">${t("boardAt", nearestStop.stop_name)}</div>
+        <div class="stepMain">${t("boardAt", displayStopName(nearestStop.stop_name))}</div>
         <div class="navBoardBadge" style="background:${color}22;color:${color};">${ico("arrowRight","icon icon-sm")} ${trip.direction}（${trip.route}）</div>
         <div class="stepSub">${t("departure", trip.boardTime, trip.minUntil)}</div>
       </div>
       <div class="navStep">
         <div class="stepLabel">${t("stepAlight")}</div>
         <div class="stepMain">${t("stopsAhead", trip.stopsBetween)}</div>
-        <div class="stepSub">${t("alightAt", trip.alightStop)}</div>
+        <div class="stepSub">${t("alightAt", displayStopName(trip.alightStop))}</div>
       </div>
       <div class="navStep">
         <div class="stepLabel">${t("stepArrive")}</div>
-        <div class="stepMain">${t("arriveAt", destinationStop.stop_name)}</div>
+        <div class="stepMain">${t("arriveAt", displayStopName(destinationStop.stop_name))}</div>
       </div>`;
   } else {
     html += `
@@ -1019,7 +1024,7 @@ function openNavScreen(){
       </div>
       <div class="navStep">
         <div class="stepLabel">${t("stepArrive")}</div>
-        <div class="stepMain">${t("arriveAt", destinationStop.stop_name)}</div>
+        <div class="stepMain">${t("arriveAt", displayStopName(destinationStop.stop_name))}</div>
       </div>`;
   }
 
