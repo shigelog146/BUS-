@@ -202,8 +202,12 @@
   }
   .sheet.show{transform:translateY(0);}
   .sheet.fullscreen{max-height:100vh; height:100vh; border-radius:0;}
+  .sheet.show.collapsed{transform:translateY(calc(100% - 46px));}
 
-  .sheetHandle{width:36px;height:4px;border-radius:2px;background:var(--line);margin:10px auto 4px;}
+  .sheetHandleWrap{padding:9px 0 8px; display:flex; justify-content:center; cursor:pointer; touch-action:manipulation;}
+  .sheetHandleWrap:active .sheetHandle{background:var(--muted);}
+
+  .sheetHandle{width:36px;height:4px;border-radius:2px;background:var(--line);}
   .sheetHeader{
     display:flex; align-items:center; padding:6px 16px 12px;
     border-bottom:1px solid var(--line); flex:none;
@@ -368,7 +372,7 @@
 
 <!-- ===================== DETAIL SHEET ===================== -->
 <div class="sheet" id="detailSheet">
-  <div class="sheetHandle"></div>
+  <div class="sheetHandleWrap" data-toggle-collapse title="タップで地図を表示/非表示"><div class="sheetHandle"></div></div>
   <div class="sheetHeader">
     <h2 id="detailTitle">バス停</h2>
     <button class="sheetClose" data-close><span id="ICO_x2"></span></button>
@@ -378,7 +382,7 @@
 
 <!-- ===================== SEARCH SHEET ===================== -->
 <div class="sheet" id="searchSheet">
-  <div class="sheetHandle"></div>
+  <div class="sheetHandleWrap" data-toggle-collapse title="タップで地図を表示/非表示"><div class="sheetHandle"></div></div>
   <div class="sheetHeader">
     <h2 data-i18n="searchSheetTitle">行き先を検索</h2>
     <button class="sheetClose" data-close><span id="ICO_x3"></span></button>
@@ -404,7 +408,7 @@
 
 <!-- ===================== HISTORY SHEET ===================== -->
 <div class="sheet" id="historySheet">
-  <div class="sheetHandle"></div>
+  <div class="sheetHandleWrap" data-toggle-collapse title="タップで地図を表示/非表示"><div class="sheetHandle"></div></div>
   <div class="sheetHeader">
     <h2 data-i18n="historyTitle">検索履歴</h2>
     <button class="sheetClose" data-close><span id="ICO_x5"></span></button>
@@ -414,7 +418,7 @@
 
 <!-- ===================== SETTINGS SHEET ===================== -->
 <div class="sheet" id="settingsSheet">
-  <div class="sheetHandle"></div>
+  <div class="sheetHandleWrap" data-toggle-collapse title="タップで地図を表示/非表示"><div class="sheetHandle"></div></div>
   <div class="sheetHeader">
     <h2 data-i18n="settingsTitle">設定</h2>
     <button class="sheetClose" data-close><span id="ICO_x6"></span></button>
@@ -1073,10 +1077,18 @@ function openSheet(id){
   overlay.classList.add("show");
 }
 function closeAllSheets(keepOverlay){
-  document.querySelectorAll(".sheet").forEach(s => s.classList.remove("show"));
+  document.querySelectorAll(".sheet").forEach(s => { s.classList.remove("show"); s.classList.remove("collapsed"); });
   if (!keepOverlay) overlay.classList.remove("show");
   clearStopRouteLines();
 }
+function toggleSheetCollapse(sheetEl){
+  if (!sheetEl) return;
+  const collapsed = sheetEl.classList.toggle("collapsed");
+  overlay.classList.toggle("show", !collapsed);
+}
+document.querySelectorAll("[data-toggle-collapse]").forEach(el => {
+  el.addEventListener("click", () => toggleSheetCollapse(el.closest(".sheet")));
+});
 overlay.addEventListener("click", () => closeAllSheets());
 document.querySelectorAll("[data-close]").forEach(btn => btn.addEventListener("click", () => closeAllSheets()));
 
