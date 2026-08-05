@@ -603,6 +603,7 @@ const ROUTE_COLORS = [
 // 状態
 //=====================================================
 let map, currentMarker, routeLine;
+let stopRouteLines = [];
 let myPos = null;
 let stopsList = [];
 let tripMap = new Map();
@@ -778,6 +779,31 @@ function drawRouteLineIfNeeded(){
   }
 }
 
+function clearStopRouteLines(){
+  stopRouteLines.forEach(l => map.removeLayer(l));
+  stopRouteLines = [];
+}
+
+function drawStopRoutes(stop){
+  clearStopRouteLines();
+  stop.routes.forEach(r => {
+    const color = colorForRoute(r.route);
+    const prefix = `${r.route}|${r.direction}|`;
+    let bestActive = null;
+    tripMap.forEach((points, key) => {
+      if (!key.startsWith(prefix)) return;
+      const active = points.filter(p => p.active);
+      if (!bestActive || active.length > bestActive.length) bestActive = active;
+    });
+    if (bestActive && bestActive.length > 1) {
+      const latlngs = bestActive.map(p => [p.lat, p.lng]);
+      const line = L.polyline(latlngs, { color, weight:4.5, opacity:0.85, lineJoin:"round", lineCap:"round" }).addTo(map);
+      line.bringToFront();
+      stopRouteLines.push(line);
+    }
+  });
+}
+
 //=====================================================
 // GPS
 //=====================================================
@@ -842,6 +868,7 @@ function openDetail(stopKey){
   document.getElementById("goHereBtn").onclick = () => { setDestination(stop); addHistory(stop.stop_name); closeAllSheets(); openNavScreen(); };
 
   openSheet("detailSheet");
+  drawStopRoutes(stop);
 }
 
 //=====================================================
@@ -1048,6 +1075,7 @@ function openSheet(id){
 function closeAllSheets(keepOverlay){
   document.querySelectorAll(".sheet").forEach(s => s.classList.remove("show"));
   if (!keepOverlay) overlay.classList.remove("show");
+  clearStopRouteLines();
 }
 overlay.addEventListener("click", () => closeAllSheets());
 document.querySelectorAll("[data-close]").forEach(btn => btn.addEventListener("click", () => closeAllSheets()));
