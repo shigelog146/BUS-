@@ -7,9 +7,21 @@
 <meta name="theme-color" content="#ffffff" />
 <link rel="manifest" href="manifest.json" />
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<!-- Leaflet：unpkg → jsDelivr → 同梱ファイル(lib/leaflet) の順に読み込み（どれかが失敗しても動くように） -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+if (typeof L === "undefined") document.write('<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+</script>
+<script>
+if (typeof L === "undefined") {
+  document.write('<link rel="stylesheet" href="lib/leaflet/leaflet.css" /><script src="lib/leaflet/leaflet.js"><\/script>');
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7"></script>
+<script>
+if (typeof supabase === "undefined") document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.39.7/dist/umd/supabase.js"><\/script>');
+</script>
 
 <style>
   :root{
@@ -305,6 +317,46 @@
   }
   .meDot{width:16px;height:16px;border-radius:50%; background:var(--ink); border:3px solid #fff; box-shadow:0 0 0 4px rgba(27,28,30,0.22);}
 
+  /* ===== 地図上のバス停名ラベル ===== */
+  .stopLabelWrap{background:none !important; border:none !important;}
+  .stopLabel{
+    position:absolute; top:-9px; height:18px; line-height:18px;
+    white-space:nowrap; font-size:12px; font-weight:700; color:var(--ink);
+    padding:0 3px; pointer-events:none; user-select:none; -webkit-user-select:none;
+    text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 2px #fff,0 0 2px #fff;
+  }
+  .stopLabel.lblR{left:11px;}
+  .stopLabel.lblL{right:11px;}
+  .stopLabel.isNearest{color:#c4262d;}
+  .stopLabel.isDest{color:#16804b;}
+  .stopLabel.hl{
+    top:-11px; height:22px; line-height:18px; font-size:12.5px;
+    background:#fff; border:2px solid var(--c,#2f6fed); border-radius:11px;
+    padding:0 8px 0 2px; box-shadow:0 2px 6px rgba(0,0,0,0.25); text-shadow:none;
+  }
+  .stopLabel.hl.lblR{left:13px;}
+  .stopLabel.hl.lblL{right:13px;}
+  .stopLabel .lblRank{
+    display:inline-block; width:16px; height:16px; line-height:16px; margin:0 4px 0 0;
+    text-align:center; border-radius:50%; background:var(--c,#2f6fed); color:#fff;
+    font-size:10.5px; font-weight:800; vertical-align:middle; position:relative; top:-1px;
+  }
+
+  /* ===== ポップアップ内：次／その次のバス停 ===== */
+  .nextStops{padding:9px 14px 4px; border-bottom:1px solid var(--line); background:var(--surface);}
+  .nsRow{display:flex; align-items:center; gap:9px; padding:4px 0; position:relative;}
+  .nsRow + .nsRow::before{
+    content:""; position:absolute; left:10px; top:-8px; width:2px; height:12px;
+    background:var(--c,#2f6fed); opacity:.45;
+  }
+  .nsBadge{
+    flex:none; width:22px; height:22px; border-radius:50%; background:var(--c,#2f6fed); color:#fff;
+    font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center;
+  }
+  .nsLabel{flex:none; font-size:11.5px; color:var(--muted); min-width:4.6em;}
+  .nsName{flex:1; min-width:0; font-size:15px; font-weight:800; color:var(--ink); overflow-wrap:anywhere;}
+  .nsEnd{font-size:12.5px; font-weight:700; color:var(--muted); padding:4px 0;}
+
   .toast{
     position:fixed; left:50%; bottom:calc(var(--nav-h) + 18px); transform:translateX(-50%);
     background:rgba(20,20,20,0.92); color:#fff; padding:10px 18px; border-radius:20px;
@@ -450,6 +502,12 @@
 <div class="toast" id="toast"></div>
 
 <script>
+if (typeof L === "undefined" || typeof supabase === "undefined") {
+  document.body.insertAdjacentHTML("afterbegin", '<div style="position:fixed;inset:0;z-index:99999;background:#fff;color:#1b1c1e;padding:24px;font:15px/1.7 sans-serif">地図ライブラリの読み込みに失敗しました。通信環境を確認して再読み込みしてください。<br><small>(' + (typeof L === "undefined" ? "Leaflet" : "Supabase") + ')</small></div>');
+  throw new Error("Required library failed to load");
+}
+</script>
+<script>
 //=====================================================
 // モノクロアイコン（インラインSVG／すべて currentColor）
 //=====================================================
@@ -519,7 +577,8 @@ const I18N = {
     toastDataFail:"データの取得に失敗しました",
     toastDestSet:(name)=>`目的地を「${name}」に設定しました`,
     nextBusOver:"本日終了", inMin:(m)=>`あと ${m} 分`, terminus:(name)=>`終点：${name}`,
-    walkPrefix:"現在地から", langSwitchToast:"表示言語を日本語にしました"
+    walkPrefix:"現在地から", langSwitchToast:"表示言語を日本語にしました",
+    nextStopLabel:"次のバス停", nextNextLabel:"その次", terminusHere:"この便はここが終点です"
   },
   en: {
     brand:"Bus Navi", place:"Tsuwano",
@@ -551,7 +610,8 @@ const I18N = {
     toastDataFail:"Failed to load data",
     toastDestSet:(name)=>`Destination set to "${name}"`,
     nextBusOver:"No more today", inMin:(m)=>`in ${m} min`, terminus:(name)=>`Terminus: ${name}`,
-    walkPrefix:"From your location:", langSwitchToast:"Display language set to English"
+    walkPrefix:"From your location:", langSwitchToast:"Display language set to English",
+    nextStopLabel:"Next stop", nextNextLabel:"Then", terminusHere:"This trip ends at this stop"
   }
 };
 let lang = "ja";
@@ -565,6 +625,7 @@ function applyLanguage(){
   document.querySelectorAll("[data-i18n-ph]").forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
   document.getElementById("langToggleLabel").textContent = lang === "ja" ? "EN" : "JA";
   renderShortcuts();
+  updateStopLabels();
   if (nearestStop) refreshNearestCardText();
   if (destinationStop) document.getElementById("navCtaText").textContent = displayStopName(destinationStop.stop_name);
   closeAllSheets();
@@ -620,6 +681,9 @@ let searchHistory = [];
 let autoGps = true;
 let highAcc = true;
 let lastWalkMeters = 0;
+let stopLabelLayer = null;          // バス停名ラベル用レイヤー
+let highlightMap = new Map();       // stopKey -> { rank, color }（ポップアップ表示中の「次／その次」）
+const LABEL_MIN_ZOOM = 13;          // このズーム未満では通常ラベルを非表示
 
 //=====================================================
 // ユーティリティ
@@ -691,6 +755,13 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
+// バス停名ラベル専用ペイン（ピンより上・タップは透過）
+map.createPane("stopLabels");
+map.getPane("stopLabels").style.zIndex = 610;
+map.getPane("stopLabels").style.pointerEvents = "none";
+stopLabelLayer = L.layerGroup().addTo(map);
+map.on("moveend resize", () => updateStopLabels());
+
 //=====================================================
 // データ読み込み
 //=====================================================
@@ -707,7 +778,7 @@ async function loadStops(){
 
     const stopKey = `${s.stop_name}|${lat}|${lng}`;
     if (!stopKeyMap.has(stopKey)) stopKeyMap.set(stopKey, { key:stopKey, stop_name:s.stop_name, lat, lng, routes:[] });
-    stopKeyMap.get(stopKey).routes.push({ route:s.route_name, direction:s.direction, timetable:s.timetable });
+    stopKeyMap.get(stopKey).routes.push({ route:s.route_name, direction:s.direction, timetable:s.timetable, order:Number(s.order_no)||0 });
 
     const times = normalizeTimes(s.timetable);
     times.forEach((time, idx) => {
@@ -743,6 +814,86 @@ function renderAllMarkers(){
     const marker = L.marker([stop.lat, stop.lng], { icon: pinIcon(color) }).addTo(map);
     marker.on("click", () => openDetail(stop.key));
     stopMarkers.push(marker);
+  });
+  updateStopLabels();
+}
+
+//=====================================================
+// 地図上のバス停名ラベル
+//=====================================================
+function labelText(name){
+  return (lang === "en" && ROMAJI[name]) ? ROMAJI[name] : name;
+}
+function estimateLabelWidth(text, fontSize){
+  let w = 0;
+  for (const ch of text) w += ch.charCodeAt(0) < 256 ? 0.58 : 1.0;
+  return w * fontSize;
+}
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+function boxesOverlap(a, b){
+  return !(a.x2 < b.x1 || a.x1 > b.x2 || a.y2 < b.y1 || a.y1 > b.y2);
+}
+function setHighlight(m){
+  highlightMap = m || new Map();
+  updateStopLabels();
+}
+function updateStopLabels(){
+  if (!stopLabelLayer || !map) return;
+  stopLabelLayer.clearLayers();
+  if (!stopsList.length) return;
+
+  const zoom = map.getZoom();
+  const size = map.getSize();
+  const margin = 40;
+  const showAll = zoom >= LABEL_MIN_ZOOM;
+
+  // 優先度：次/その次 > 目的地 > 最寄り > 乗り入れ路線が多い停留所
+  const candidates = [];
+  stopsList.forEach(stop => {
+    const hl = highlightMap.get(stop.key);
+    const isDest = !!(destinationStop && stop.key === destinationStop.key);
+    const isNearest = !!(nearestStop && stop.key === nearestStop.key);
+    if (!showAll && !hl && !isDest && !isNearest) return;
+    const pt = map.latLngToContainerPoint([stop.lat, stop.lng]);
+    if (pt.x < -margin || pt.y < -margin || pt.x > size.x + margin || pt.y > size.y + margin) return;
+    const priority = hl ? hl.rank : isDest ? 10 : isNearest ? 11 : 20;
+    candidates.push({ stop, pt, hl, isDest, isNearest, priority });
+  });
+  candidates.sort((a, b) => a.priority - b.priority || b.stop.routes.length - a.stop.routes.length);
+
+  const placed = [];
+  candidates.forEach(c => {
+    const text = labelText(c.stop.stop_name);
+    const fs = c.hl ? 12.5 : 12;
+    const w = estimateLabelWidth(text, fs) + (c.hl ? 30 : 8);
+    const h = c.hl ? 22 : 18;
+    const gap = c.hl ? 13 : 11;
+    const right = { x1: c.pt.x + gap, x2: c.pt.x + gap + w, y1: c.pt.y - h/2, y2: c.pt.y + h/2, side: "lblR" };
+    const left  = { x1: c.pt.x - gap - w, x2: c.pt.x - gap, y1: c.pt.y - h/2, y2: c.pt.y + h/2, side: "lblL" };
+
+    let chosen = null;
+    for (const box of [right, left]) {
+      if (!placed.some(p => boxesOverlap(p, box))) { chosen = box; break; }
+    }
+    // ハイライト対象は重なっても必ず表示（右側に配置）
+    if (!chosen && c.hl) chosen = right;
+    if (!chosen) return;
+    placed.push(chosen);
+
+    const cls = ["stopLabel", chosen.side];
+    if (c.hl) cls.push("hl");
+    if (c.isDest) cls.push("isDest");
+    else if (c.isNearest) cls.push("isNearest");
+    const style = c.hl ? ` style="--c:${c.hl.color}"` : "";
+    const rank = c.hl ? `<span class="lblRank">${c.hl.rank}</span>` : "";
+    const icon = L.divIcon({
+      className: "stopLabelWrap",
+      html: `<div class="${cls.join(" ")}"${style}>${rank}${escapeHtml(text)}</div>`,
+      iconSize: [0, 0], iconAnchor: [0, 0]
+    });
+    L.marker([c.stop.lat, c.stop.lng], { icon, interactive: false, keyboard: false, pane: "stopLabels" }).addTo(stopLabelLayer);
   });
 }
 
@@ -824,6 +975,33 @@ document.getElementById("locateBtn").onclick = locate;
 // 詳細画面
 //=====================================================
 let currentDetailKey = null;
+
+// この停留所から見て「次」「その次」の停留所を返す。
+// 戻り値：配列（最大2件）。空配列＝この便の終点。null＝該当便なし。
+function getUpcomingStops(r, stop, tripIdx){
+  const findIn = (key) => {
+    const pts = tripMap.get(key);
+    if (!pts) return null;
+    const active = pts.filter(p => p.active);
+    const i = active.findIndex(p => p.stop_name === stop.stop_name && p.lat === stop.lat && p.lng === stop.lng && p.order === r.order);
+    return i === -1 ? null : active.slice(i + 1, i + 3);
+  };
+  if (tripIdx >= 0) {
+    const res = findIn(`${r.route}|${r.direction}|trip_${tripIdx}`);
+    if (res) return res;
+  }
+  // 本日の便が終了している場合などは、この停留所を通る便から代表を選ぶ
+  const prefix = `${r.route}|${r.direction}|`;
+  let best = null;
+  for (const key of tripMap.keys()) {
+    if (!key.startsWith(prefix)) continue;
+    const res = findIn(key);
+    if (res && (!best || res.length > best.length)) best = res;
+    if (best && best.length >= 2) break;
+  }
+  return best;
+}
+
 function openDetail(stopKey){
   const stop = stopsList.find(s => s.key === stopKey);
   if (!stop) return;
@@ -839,6 +1017,7 @@ function openDetail(stopKey){
   }
 
   let cardsHtml = "";
+  const hlMap = new Map();
   stop.routes.forEach(r => {
     const color = colorForRoute(r.route);
     const next = nextBusInfo(r.timetable);
@@ -848,6 +1027,22 @@ function openDetail(stopKey){
     const isPast = next.index < 0;
 
     const chips = times.map((tm, i) => `<span class="ttChip ${i === next.index ? "next" : ""}">${tm || "-"}</span>`).join("");
+
+    // 次／その次のバス停
+    const upcoming = getUpcomingStops(r, stop, next.index);
+    let nextStopsHtml = "";
+    if (upcoming) {
+      if (upcoming.length === 0) {
+        nextStopsHtml = `<div class="nextStops"><div class="nsEnd">${t("terminusHere")}</div></div>`;
+      } else {
+        const labels = [t("nextStopLabel"), t("nextNextLabel")];
+        nextStopsHtml = `<div class="nextStops" style="--c:${color}">` + upcoming.map((p, i) => {
+          const k = `${p.stop_name}|${p.lat}|${p.lng}`;
+          if (!hlMap.has(k) || hlMap.get(k).rank > i + 1) hlMap.set(k, { rank: i + 1, color });
+          return `<div class="nsRow"><span class="nsBadge">${i + 1}</span><span class="nsLabel">${labels[i]}</span><span class="nsName">${escapeHtml(displayStopName(p.stop_name))}</span></div>`;
+        }).join("") + `</div>`;
+      }
+    }
 
     cardsHtml += `
       <div class="directionCard">
@@ -859,6 +1054,7 @@ function openDetail(stopKey){
             ${dest !== "-" ? `<div class="dDest">${t("terminus", displayStopName(dest))}</div>` : ""}
           </div>
         </div>
+        ${nextStopsHtml}
         <div class="dNext ${isPast ? "past" : ""}">
           <div class="nTime">${next.time}</div>
           <div class="nMin">${next.min !== null ? t("inMin", next.min) : ""}</div>
@@ -873,6 +1069,7 @@ function openDetail(stopKey){
 
   openSheet("detailSheet");
   drawStopRoutes(stop);
+  setHighlight(hlMap);   // 地図上でも「次／その次」を強調表示（openSheet後に設定）
 }
 
 //=====================================================
@@ -1080,6 +1277,7 @@ function closeAllSheets(keepOverlay){
   document.querySelectorAll(".sheet").forEach(s => { s.classList.remove("show"); s.classList.remove("collapsed"); });
   if (!keepOverlay) overlay.classList.remove("show");
   clearStopRouteLines();
+  if (highlightMap.size) setHighlight(new Map());
 }
 function toggleSheetCollapse(sheetEl){
   if (!sheetEl) return;
