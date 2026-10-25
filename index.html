@@ -356,6 +356,24 @@ if (typeof supabase === "undefined") document.write('<script src="https://unpkg.
   .nsLabel{flex:none; font-size:11.5px; color:var(--muted); min-width:4.6em;}
   .nsName{flex:1; min-width:0; font-size:15px; font-weight:800; color:var(--ink); overflow-wrap:anywhere;}
   .nsEnd{font-size:12.5px; font-weight:700; color:var(--muted); padding:4px 0;}
+  .nsMore{display:none;}
+  .nsMore.show{display:block;}
+  .nsBadge.small{font-size:10.5px;}
+  .nsRow.isTerm .nsName::after{content:attr(data-term); margin-left:6px; font-size:11px; font-weight:800; color:#fff; background:var(--c,#2f6fed); padding:1px 7px; border-radius:9px; vertical-align:middle;}
+  .nsMoreBtn{
+    display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
+    margin:6px 0 6px; padding:9px 12px; border-radius:10px; border:1px solid var(--c,#2f6fed);
+    background:transparent; color:var(--c,#2f6fed); font-size:13px; font-weight:800; cursor:pointer;
+  }
+  .nsMoreBtn:active{opacity:.7;}
+  .routeFilterNote{
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 10px; padding:9px 12px;
+    border-radius:10px; background:rgba(31,164,99,.12); color:var(--ink); font-size:12.5px; font-weight:700;
+  }
+  .routeFilterNote button{
+    margin-left:auto; border:none; background:transparent; color:#1fa463; font-weight:800;
+    font-size:12.5px; text-decoration:underline; cursor:pointer; padding:2px 4px;
+  }
 
   .toast{
     position:fixed; left:50%; bottom:calc(var(--nav-h) + 18px); transform:translateX(-50%);
@@ -578,7 +596,9 @@ const I18N = {
     toastDestSet:(name)=>`目的地を「${name}」に設定しました`,
     nextBusOver:"本日終了", inMin:(m)=>`あと ${m} 分`, terminus:(name)=>`終点：${name}`,
     walkPrefix:"現在地から", langSwitchToast:"表示言語を日本語にしました",
-    nextStopLabel:"次のバス停", nextNextLabel:"その次", terminusHere:"この便はここが終点です"
+    nextStopLabel:"次のバス停", nextNextLabel:"その次", terminusHere:"この便はここが終点です",
+    showRestBtn:(n)=>`この先 ${n} 件を終点まで表示`, hideRestBtn:"閉じる", termTag:"終点",
+    filterNote:(d)=>`「${d}」へ行く路線のみ表示中`, showAllRoutes:"すべての路線を表示", showDestRoutes:"目的地の路線のみ"
   },
   en: {
     brand:"Bus Navi", place:"Tsuwano",
@@ -611,7 +631,9 @@ const I18N = {
     toastDestSet:(name)=>`Destination set to "${name}"`,
     nextBusOver:"No more today", inMin:(m)=>`in ${m} min`, terminus:(name)=>`Terminus: ${name}`,
     walkPrefix:"From your location:", langSwitchToast:"Display language set to English",
-    nextStopLabel:"Next stop", nextNextLabel:"Then", terminusHere:"This trip ends at this stop"
+    nextStopLabel:"Next stop", nextNextLabel:"Then", terminusHere:"This trip ends at this stop",
+    showRestBtn:(n)=>`Show ${n} more stops to the terminus`, hideRestBtn:"Hide", termTag:"End",
+    filterNote:(d)=>`Showing only routes to ${d}`, showAllRoutes:"Show all routes", showDestRoutes:"Routes to destination only"
   }
 };
 let lang = "ja";
@@ -977,14 +999,14 @@ document.getElementById("locateBtn").onclick = locate;
 let currentDetailKey = null;
 
 // この停留所から見て「次」「その次」の停留所を返す。
-// 戻り値：配列（最大2件）。空配列＝この便の終点。null＝該当便なし。
+// 戻り値：この先の全停留所の配列（終点まで）。空配列＝この便の終点。null＝該当便なし。
 function getUpcomingStops(r, stop, tripIdx){
   const findIn = (key) => {
     const pts = tripMap.get(key);
     if (!pts) return null;
     const active = pts.filter(p => p.active);
     const i = active.findIndex(p => p.stop_name === stop.stop_name && p.lat === stop.lat && p.lng === stop.lng && p.order === r.order);
-    return i === -1 ? null : active.slice(i + 1, i + 3);
+    return i === -1 ? null : active.slice(i + 1);
   };
   if (tripIdx >= 0) {
     const res = findIn(`${r.route}|${r.direction}|trip_${tripIdx}`);
@@ -997,14 +1019,30 @@ function getUpcomingStops(r, stop, tripIdx){
     if (!key.startsWith(prefix)) continue;
     const res = findIn(key);
     if (res && (!best || res.length > best.length)) best = res;
-    if (best && best.length >= 2) break;
   }
   return best;
 }
 
-function openDetail(stopKey){
+// この路線・方向が、stop から destStop へ向かう便を持つか
+function routeReachesDestination(r, stop, destStop){
+  const prefix = `${r.route}|${r.direction}|`;
+  for (const [key, pts] of tripMap.entries()) {
+    if (!key.startsWith(prefix)) continue;
+    const active = pts.filter(p => p.active);
+    const i = active.findIndex(p => p.stop_name === stop.stop_name && p.lat === stop.lat && p.lng === stop.lng && p.order === r.order);
+    if (i === -1) continue;
+    if (active.slice(i + 1).some(p => p.stop_name === destStop.stop_name)) return true;
+  }
+  return false;
+}
+
+let detailShowAllRoutes = false;
+let detailExpanded = new Set();
+
+function openDetail(stopKey, keepState){
   const stop = stopsList.find(s => s.key === stopKey);
   if (!stop) return;
+  if (!keepState || currentDetailKey !== stopKey) { detailShowAllRoutes = false; detailExpanded = new Set(); }
   currentDetailKey = stopKey;
 
   document.getElementById("detailTitle").textContent = displayStopName(stop.stop_name);
@@ -1016,9 +1054,23 @@ function openDetail(stopKey){
     metaHtml = `<div class="detailStopMeta">${ico("pin","icon icon-sm")} ${t("walkPrefix")} ${w.distText}（${w.timeText}）</div>`;
   }
 
+  // 目的地が設定されている場合は、その目的地へ行く路線のみ表示
+  let routes = stop.routes;
+  let filterNoteHtml = "";
+  if (destinationStop && destinationStop.key !== stop.key) {
+    const filtered = stop.routes.filter(r => routeReachesDestination(r, stop, destinationStop));
+    if (filtered.length > 0 && filtered.length < stop.routes.length) {
+      if (!detailShowAllRoutes) routes = filtered;
+      filterNoteHtml = `<div class="routeFilterNote"><span>${detailShowAllRoutes ? "" : t("filterNote", escapeHtml(displayStopName(destinationStop.stop_name)))}</span><button id="routeFilterToggle">${detailShowAllRoutes ? t("showDestRoutes") : t("showAllRoutes")}</button></div>`;
+    } else if (filtered.length > 0 && filtered.length === stop.routes.length) {
+      filterNoteHtml = "";
+    }
+  }
+
   let cardsHtml = "";
   const hlMap = new Map();
-  stop.routes.forEach(r => {
+  const extraHl = [];  // 展開時のみ地図強調する3番目以降
+  routes.forEach((r, cardIdx) => {
     const color = colorForRoute(r.route);
     const next = nextBusInfo(r.timetable);
     const times = normalizeTimes(r.timetable);
@@ -1028,19 +1080,26 @@ function openDetail(stopKey){
 
     const chips = times.map((tm, i) => `<span class="ttChip ${i === next.index ? "next" : ""}">${tm || "-"}</span>`).join("");
 
-    // 次／その次のバス停
-    const upcoming = getUpcomingStops(r, stop, next.index);
+    // 次／その次のバス停（＋終点まで展開ボタン）
+    const rest = getUpcomingStops(r, stop, next.index);
     let nextStopsHtml = "";
-    if (upcoming) {
-      if (upcoming.length === 0) {
+    if (rest) {
+      if (rest.length === 0) {
         nextStopsHtml = `<div class="nextStops"><div class="nsEnd">${t("terminusHere")}</div></div>`;
       } else {
         const labels = [t("nextStopLabel"), t("nextNextLabel")];
-        nextStopsHtml = `<div class="nextStops" style="--c:${color}">` + upcoming.map((p, i) => {
-          const k = `${p.stop_name}|${p.lat}|${p.lng}`;
-          if (!hlMap.has(k) || hlMap.get(k).rank > i + 1) hlMap.set(k, { rank: i + 1, color });
-          return `<div class="nsRow"><span class="nsBadge">${i + 1}</span><span class="nsLabel">${labels[i]}</span><span class="nsName">${escapeHtml(displayStopName(p.stop_name))}</span></div>`;
-        }).join("") + `</div>`;
+        const head = rest.slice(0, 2);
+        const tail = rest.slice(2);
+        const expanded = detailExpanded.has(cardIdx);
+        const mkKey = (p) => `${p.stop_name}|${p.lat}|${p.lng}`;
+        const rowHtml = (p, i, isLast) => `<div class="nsRow${isLast && rest.length > 2 ? " isTerm" : ""}"><span class="nsBadge${i + 1 >= 10 ? " small" : ""}">${i + 1}</span><span class="nsLabel">${i < 2 ? labels[i] : ""}</span><span class="nsName" data-term="${t("termTag")}">${escapeHtml(displayStopName(p.stop_name))}</span></div>`;
+        head.forEach((p, i) => { const k = mkKey(p); if (!hlMap.has(k) || hlMap.get(k).rank > i + 1) hlMap.set(k, { rank: i + 1, color }); });
+        tail.forEach((p, j) => { if (expanded) extraHl.push({ k: mkKey(p), rank: j + 3, color }); });
+        nextStopsHtml = `<div class="nextStops" style="--c:${color}">`
+          + head.map((p, i) => rowHtml(p, i, false)).join("")
+          + (tail.length ? `<div class="nsMore ${expanded ? "show" : ""}" id="nsMore_${cardIdx}">${tail.map((p, j) => rowHtml(p, j + 2, j === tail.length - 1)).join("")}</div>
+              <button class="nsMoreBtn" data-card="${cardIdx}" data-n="${tail.length}">${expanded ? t("hideRestBtn") : t("showRestBtn", tail.length)}</button>` : "")
+          + `</div>`;
       }
     }
 
@@ -1063,23 +1122,85 @@ function openDetail(stopKey){
       </div>`;
   });
 
+  extraHl.forEach(e => { if (!hlMap.has(e.k) || hlMap.get(e.k).rank > e.rank) hlMap.set(e.k, { rank: e.rank, color: e.color }); });
+
   const goBtn = `<button class="goHereBtn" id="goHereBtn">${t("goHereBtn")}</button>`;
-  document.getElementById("detailBody").innerHTML = metaHtml + cardsHtml + goBtn;
+  document.getElementById("detailBody").innerHTML = metaHtml + filterNoteHtml + cardsHtml + goBtn;
+  document.querySelectorAll("#detailBody .nsMoreBtn").forEach(btn => {
+    btn.onclick = () => {
+      const i = Number(btn.dataset.card);
+      if (detailExpanded.has(i)) detailExpanded.delete(i); else detailExpanded.add(i);
+      const sc = document.getElementById("detailBody").scrollTop;
+      openDetail(stopKey, true);
+      document.getElementById("detailBody").scrollTop = sc;
+    };
+  });
+  const rfBtn = document.getElementById("routeFilterToggle");
+  if (rfBtn) rfBtn.onclick = () => { detailShowAllRoutes = !detailShowAllRoutes; detailExpanded = new Set(); openDetail(stopKey, true); };
   document.getElementById("goHereBtn").onclick = () => { setDestination(stop); addHistory(stop.stop_name); closeAllSheets(); openNavScreen(); };
 
   openSheet("detailSheet");
-  drawStopRoutes(stop);
+  drawStopRoutes({ routes });
   setHighlight(hlMap);   // 地図上でも「次／その次」を強調表示（openSheet後に設定）
 }
 
 //=====================================================
 // 検索
 //=====================================================
+// 検索用の正規化：全角半角・大小文字・カタカナ/ひらがな・記号/空白・ローマ字の長音ゆれを吸収
+function normSearch(str){
+  let x = String(str || "").normalize("NFKC").toLowerCase();
+  x = x.replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)); // カタカナ→ひらがな
+  x = x.replace(/[\s\u3000.\-_・・()（）\[\]「」'’"`,、。①②③④⑤]/g, "");
+  x = x.replace(/ou/g, "o").replace(/oo/g, "o").replace(/uu/g, "u").replace(/aa/g, "a").replace(/ii/g, "i");
+  return x;
+}
+// 英語の一般名称 → ローマ字名の語に置換（例：Tsuwano Station → Tsuwano Eki）
+const EN_ALIASES = [
+  [/\bbus\s*(center|centre|terminal)\b/g, "basusentaa"],
+  [/\broadside\s*(station)?\b/g, "michi no eki"],
+  [/\b(town|city)\s*hall\b|\btown\s*office\b|\bgovernment\s*office\b/g, "yakuba"],
+  [/\bstation\b|\bsta\b\.?/g, "eki"],
+  [/\bhospital\b/g, "byouin"],
+  [/\bhot\s*spring\b/g, "onsen"],
+  [/\bshrine\b/g, "jinja"],
+  [/\bhigh\s*school\b/g, "koukou"],
+  [/\bhall\b|\bcommunity\s*center\b/g, "kaikan"],
+  [/\bpark\b/g, "kouen"],
+  [/\bclinic\b/g, "shinryoujo"]
+];
+function normKeywordVariants(keyword){
+  const base = String(keyword || "").normalize("NFKC").toLowerCase().trim();
+  const variants = new Set([normSearch(base)]);
+  let aliased = base;
+  EN_ALIASES.forEach(([re, to]) => { aliased = aliased.replace(re, to); });
+  if (aliased !== base) variants.add(normSearch(aliased));
+  return Array.from(variants).filter(Boolean);
+}
+const stopSearchIndex = new Map(); // stop_name -> { ja, en }
+function getSearchIndex(name){
+  if (!stopSearchIndex.has(name)) stopSearchIndex.set(name, { ja: normSearch(name), en: normSearch(ROMAJI[name] || "") });
+  return stopSearchIndex.get(name);
+}
 function searchStops(keyword){
   if (!keyword) return [];
+  const vars = normKeywordVariants(keyword);
+  if (vars.length === 0) return [];
   const uniq = new Map();
-  stopsList.filter(s => s.stop_name.includes(keyword)).forEach(s => { if (!uniq.has(s.stop_name)) uniq.set(s.stop_name, s); });
-  return Array.from(uniq.values()).slice(0, 20);
+  stopsList.forEach(s => {
+    if (uniq.has(s.stop_name)) return;
+    const idx = getSearchIndex(s.stop_name);
+    let score = 0;
+    for (const v of vars) {
+      if (idx.ja.startsWith(v) || (idx.en && idx.en.startsWith(v))) { score = Math.max(score, 2); }
+      else if (idx.ja.includes(v) || (idx.en && idx.en.includes(v))) { score = Math.max(score, 1); }
+    }
+    if (score > 0) uniq.set(s.stop_name, { stop: s, score });
+  });
+  return Array.from(uniq.values())
+    .sort((a, b) => b.score - a.score || b.stop.routes.length - a.stop.routes.length)
+    .map(x => x.stop)
+    .slice(0, 30);
 }
 
 function renderShortcuts(){
