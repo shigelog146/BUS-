@@ -634,6 +634,41 @@ const I18N = {
     nextStopLabel:"Next stop", nextNextLabel:"Then", terminusHere:"This trip ends at this stop",
     showRestBtn:(n)=>`Show ${n} more stops to the terminus`, hideRestBtn:"Hide", termTag:"End",
     filterNote:(d)=>`Showing only routes to ${d}`, showAllRoutes:"Show all routes", showDestRoutes:"Routes to destination only"
+  },
+  fr: {
+    brand:"Bus Navi", place:"Tsuwano",
+    searchPlaceholder:"Entrez une destination (ex. Mairie, Gare)",
+    searchSheetPlaceholder:"Entrez une destination (recherche partielle OK)",
+    nearestLabel:"Arrêt le plus proche", navCtaLabel:"Itinéraire vers la destination",
+    navMap:"Carte", navSearch:"Recherche", navHistory:"Historique", navSettings:"Réglages",
+    detailTitleDefault:"Arrêt de bus", searchSheetTitle:"Rechercher une destination",
+    historyTitle:"Historique de recherche", settingsTitle:"Réglages",
+    settingAutoGps:"Localisation automatique", settingAutoGpsSub:"Obtenir votre position au démarrage",
+    settingHighAcc:"Mode haute précision", settingHighAccSub:"Privilégier la précision du GPS (consomme plus de batterie)",
+    settingData:"Source des données", settingDataSub:"Données des arrêts et horaires (Supabase)",
+    goHereBtn:"Définir comme destination et naviguer",
+    emptySearch:(k)=>`Aucun arrêt ne correspond à « ${k} »`,
+    emptyHistory:"Aucun historique de recherche", emptyHistorySub:"Les destinations recherchées apparaîtront ici",
+    navEmptyDest:"Recherchez et choisissez une destination",
+    navEmptyGps:"Position indisponible.", navEmptyGpsSub:"Veuillez autoriser la localisation sur l'écran de la carte",
+    stepCurrent:"Position actuelle", stepBoard:"Montée", stepAlight:"Descente", stepArrive:"Arrivée",
+    nearYou:(name)=>`Vous êtes près de ${name}`,
+    boardAt:(name)=>`Montez à ${name}`,
+    departure:(t,m)=>`Départ ${t} (dans ${m} min)`,
+    stopsAhead:(n)=>`Descendez ${n} arrêt(s) plus loin`,
+    alightAt:(name)=>`Descendez à ${name}`,
+    arriveAt:(name)=>`Arrivée à « ${name} »`,
+    noDirect:"Aucun bus direct trouvé",
+    noDirectSub:"Une correspondance peut être nécessaire. Consultez aussi l'horaire affiché à l'arrêt.",
+    googleWalkBtn:"Lancer la navigation à pied dans Google Maps",
+    toastGpsFail:"Impossible d'obtenir la position GPS. Affichage du centre-ville.",
+    toastDataFail:"Échec du chargement des données",
+    toastDestSet:(name)=>`Destination définie : « ${name} »`,
+    nextBusOver:"Terminé pour aujourd'hui", inMin:(m)=>`dans ${m} min`, terminus:(name)=>`Terminus : ${name}`,
+    walkPrefix:"Depuis votre position :", langSwitchToast:"Langue d'affichage : français",
+    nextStopLabel:"Arrêt suivant", nextNextLabel:"Ensuite", terminusHere:"Ce trajet se termine à cet arrêt",
+    showRestBtn:(n)=>`Afficher les ${n} arrêts suivants jusqu'au terminus`, hideRestBtn:"Masquer", termTag:"Terminus",
+    filterNote:(d)=>`Seules les lignes vers « ${d} » sont affichées`, showAllRoutes:"Afficher toutes les lignes", showDestRoutes:"Lignes vers la destination uniquement"
   }
 };
 let lang = "ja";
@@ -645,7 +680,7 @@ function applyLanguage(){
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-ph]").forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
-  document.getElementById("langToggleLabel").textContent = lang === "ja" ? "EN" : "JA";
+  document.getElementById("langToggleLabel").textContent = { ja:"EN", en:"FR", fr:"JA" }[lang];
   renderShortcuts();
   updateStopLabels();
   if (nearestStop) refreshNearestCardText();
@@ -653,7 +688,7 @@ function applyLanguage(){
   closeAllSheets();
 }
 document.getElementById("langToggle").addEventListener("click", () => {
-  lang = lang === "ja" ? "en" : "ja";
+  lang = { ja:"en", en:"fr", fr:"ja" }[lang];
   applyLanguage();
   showToast(t("langSwitchToast"));
 });
@@ -670,14 +705,14 @@ const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey, {
 const DEFAULT_CENTER = [34.4521, 131.764];
 const WALK_M_PER_MIN = 65;
 const SHORTCUTS = [
-  { ja:"役場", en:"Town Hall" },
-  { ja:"津和野駅", en:"Tsuwano Sta." },
-  { ja:"日原駅", en:"Nichihara Sta." },
-  { ja:"道の駅", en:"Roadside Sta." }
+  { ja:"役場", en:"Town Hall", fr:"Mairie" },
+  { ja:"津和野駅", en:"Tsuwano Sta.", fr:"Gare de Tsuwano" },
+  { ja:"日原駅", en:"Nichihara Sta.", fr:"Gare de Nichihara" },
+  { ja:"道の駅", en:"Roadside Sta.", fr:"Michi-no-Eki" }
 ];
 
 const ROMAJI = {"はざま橋":"Hazama Hashi","やなぎ会館":"Yanagi Kaikan","カントリー入口":"Kantorii Iriguchi","カンネオ":"Kanneo","一の谷口":"Ichi No Taniguchi","万瀬":"Man Se","三歩市":"San Ho Shi","三歩市上":"San Ho Shijou","三谷駅入口":"Mitani Eki Iriguchi","上杉":"Uesugi","上横道":"Ue Yokomichi","上高野":"Ue Takano","下奥ケ野":"Shita Oku Ke No","下徳次":"Shita Tokuji","下横道":"Shita Yokomichi","下組":"Shitagumi","下青原":"Shita Aohara","下高野":"Shimotakano","中内谷口":"Nakauchi Taniguchi","中原":"Nakahara","中川":"Nakagawa","中川上":"Nakagawa Ue","中座会館前":"Chuuza Kaikan Mae","中座１":"Chuuza 1","中組":"Naka Kumi","中間組":"Chuukan Kumi","二俣中央":"Futamata Chuuou","二俣公民館":"Futamata Kouminkan","二俣口":"Futamata Kuchi","今市通口":"Imaichi Toori Kuchi","休":"Kyuu","元郷":"Motogou","公民館前":"Kouminkan Mae","共存病院":"Kyouzon Byouin","共存病院前":"Kyouzon Byouin Mae","円の谷":"En No Tani","口屋橋":"Kuchi Ya Hashi","吉ケ原":"Kichi Ke Hara","吉ヶ原":"Kichi Ke Hara","吉部":"Kichibu","吹野上":"Fukino Ue","吹野下":"Fukino Shita","商人センター":"Shounin Sentaa","商工会前":"Shoukou Kai Mae","喜時雨":"Ki Shigure","四本松":"Yonhon Matsu","土井敷団地前":"Tsuchii Shiki Danchi Mae","土木事務所前":"Doboku Jimusho Mae","土木事業所前":"Doboku Jigyousho Mae","地域センター前":"Chiiki Sentaa Mae","堀庭園":"Hori Teien","堤溢":"Tsutsumi Itsu","堤田下":"Tsutsumida Shita","堤田公民館":"Tsutsumida Kouminkan","夕河内":"Yuu Kawauchi","大木上":"Taiboku Ue","大木下":"Taiboku Shita","大畠":"Oohata","奥ケ野":"Oku Ke No","奧ケ野":"Oku Ke No","宮ノ前":"Miya No Mae","宿の谷上":"Yado No Tanigami","宿の谷下":"Yado No Tani Shita","小倉谷口":"Ogura Taniguchi","小川溢":"Ogawa Itsu","小床":"Shou Toko","小床向上":"Shou Toko Koujou","小床向下":"Shou Toko Kou Shita","小瀬":"Oze","小瀬会館":"Oze Kaikan","小瀬会館前":"Oze Kaikan Mae","小田城":"Oda Shiro","小直":"Shou Choku","小郷":"Ogou","小野":"Ono","山入":"Yama Nyuu","岩倉":"Iwakura","岩川":"Iwakawa","川尻口":"Kawajiri Kuchi","左鐙":"Hidari Abumi","市尾":"Ichinoo","平野":"Heiya","幸町":"Saiwaichou","役場前":"Yakuba Mae","徳佐駅入口":"Tokusa Eki Iriguchi","徳次":"Tokuji","徳次中":"Tokuji Naka","惣田":"Sou Ta","戦":"Sen","掘割":"Horiwari","新左鐙橋":"Shinza Abumi Hashi","新橋":"Shinbashi","新畑":"Shinhata","日原":"Nichihara","日原保育園":"Nichihara Hoikuen","日原駅":"Nichihara Eki","日浦口":"Hiura Kuchi","旧畑迫病院前":"Kyuu Hatake Sako Byouin Mae","春日":"Kasuga","晩越":"Ban Etsu","曲がり角":"Magari Kaku","木の口上":"Ki No Koujou","木尾谷":"Ki Otani","木尾谷口":"Ki Otani Kuchi","木部保育園前":"Mokubu Hoikuen Mae","木部公民館前":"Mokubu Kouminkan Mae","本町入口":"Honchou Iriguchi","東善寺前":"Higashi Zen Teramae","東殿町":"Higashi Tonomachi","東萩駅":"Higashi Hagi Eki","東萩駅①":"Higashi Hagi Eki ①","東青原駅前":"Higashi Aohara Ekimae","松陰神社":"Shouin Jinja","枕瀬":"Makura Se","森":"Mori","椛井谷口":"Kaba Itani Kuchi","榊地蔵前":"Sakaki Jizou Mae","横瀬":"Yokose","殿町":"Tonomachi","池村":"Ikemura","津和野バスセンター":"Tsuwano Basusentaa","津和野温泉":"Tsuwano Onsen","津和野駅":"Tsuwano Eki","津和野高校":"Tsuwano Koukou","添谷公民館前":"Soeya Kouminkan Mae","添谷橋":"Soeya Hashi","清水":"Shimizu","滝ノ上":"Taki No Ue","滝元":"Takimoto","牧ケ野":"Maki Ke No","犬戻し":"Inu Modoshi","瓜生口":"Uryuu Kuchi","生雲":"Ikumo","田代":"Tashiro","田屋組":"Taya Kumi","町田":"Machida","畑":"Hatake","畑ケ迫":"Hatake Ke Sako","畑迫住宅前":"Hatake Sako Juutakumae","畳":"Tatami","病院前":"Byouin Mae","白井":"Shirai","白井下":"Shirai Shita","相撲ヶ原":"Sumou Ke Hara","相撲ヶ原上":"Sumou Ke Hara Ue","矢折":"Ya Ori","石川前":"Ishikawa Mae","祇園丁":"Gion Chou","福谷口":"Fukutani Kuchi","程彼三叉路":"Hodogan Sansaro","程野":"Hodono","稲成下":"Ine Sei Shita","笹ケ峠":"Sasa Ke Touge","絵師口":"Eshi Kuchi","絵師尻":"Eshi Shiri","脇本上":"Wakimoto Ue","脇本下":"Wakimoto Shita","脇本中":"Wakimoto Naka","舟板":"Funaita","萩バスセンター":"Hagi Basusentaa","萩バスセンター①":"Hagi Basusentaa ①","西光寺前":"Saikou Teramae","西谷出合":"Nishitani Deai","診療所（国道）":"Shinryoujo Kokudou","諸鹿口":"Sho Shika Kuchi","豊稼上":"Yutaka Ka Ue","豊稼下":"Yutaka Ka Shita","豊稼会館前":"Yutaka Ka Kaikan Mae","赤木口":"Akagi Kuchi","道の駅":"Michi No Eki","郷土館前":"Kyoudo Tatemae","野中上":"Nonaka Ue","野中下":"Nonaka Shita","野口":"Noguchi","野地下":"Noji Shita","金見町上":"Kin Ken Machi Ue","金見町下":"Kin Ken Machi Shita","長嶺建設前":"Nagamine Kensetsu Mae","長野":"Nagano","門林":"Monbayashi","門林集会所":"Monbayashi Shuukaijo","集会所前":"Shuukaijo Mae","集議谷":"Shuu Gi Tani","青原駅":"Aohara Eki","須川元郷":"Sugawa Motogou","須川口":"Sugawa Kuchi","須川小学校前":"Sugawa Shougakkou Mae","須田小学校前":"Suda Shougakkou Mae","願成就温泉":"Ganjou Shuu Onsen","風呂屋橋":"Furoya Hashi","風呂屋橋南":"Furoya Kyounan","高峯":"Kouhou","高田":"Takada","鳥井":"Torii","鷗外旧居":"Ougai Kyuukyo","鷲原":"Washi Hara","鷲原公園前":"Washi Hara Kouenmae","鹿谷":"Shikatani"};
-function displayStopName(name){ return (lang==="en" && ROMAJI[name]) ? `${name} (${ROMAJI[name]})` : name; }
+function displayStopName(name){ return (lang!=="ja" && ROMAJI[name]) ? `${name} (${ROMAJI[name]})` : name; }
 
 const ROUTE_COLORS = [
   "#2f6fed","#e2792a","#1fa463","#9b3fd1","#d1a62a",
@@ -844,7 +879,7 @@ function renderAllMarkers(){
 // 地図上のバス停名ラベル
 //=====================================================
 function labelText(name){
-  return (lang === "en" && ROMAJI[name]) ? ROMAJI[name] : name;
+  return (lang !== "ja" && ROMAJI[name]) ? ROMAJI[name] : name;
 }
 function estimateLabelWidth(text, fontSize){
   let w = 0;
@@ -1150,6 +1185,7 @@ function openDetail(stopKey, keepState){
 // 検索用の正規化：全角半角・大小文字・カタカナ/ひらがな・記号/空白・ローマ字の長音ゆれを吸収
 function normSearch(str){
   let x = String(str || "").normalize("NFKC").toLowerCase();
+  x = x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").normalize("NFC"); // é→e など
   x = x.replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)); // カタカナ→ひらがな
   x = x.replace(/[\s\u3000.\-_・・()（）\[\]「」'’"`,、。①②③④⑤]/g, "");
   x = x.replace(/ou/g, "o").replace(/oo/g, "o").replace(/uu/g, "u").replace(/aa/g, "a").replace(/ii/g, "i");
@@ -1167,12 +1203,25 @@ const EN_ALIASES = [
   [/\bhigh\s*school\b/g, "koukou"],
   [/\bhall\b|\bcommunity\s*center\b/g, "kaikan"],
   [/\bpark\b/g, "kouen"],
-  [/\bclinic\b/g, "shinryoujo"]
+  [/\bclinic\b/g, "shinryoujo"],
+  // --- français（アクセント除去後） ---
+  [/\bgare\s*routiere\b|\bterminal\s*de\s*bus\b|\bcentre\s*de\s*bus\b/g, "basusentaa"],
+  [/\bgare\b/g, "eki"],
+  [/\bmairie\b|\bhotel\s*de\s*ville\b/g, "yakuba"],
+  [/\bhopital\b/g, "byouin"],
+  [/\bsource\s*thermale\b|\bbains?\s*thermaux\b/g, "onsen"],
+  [/\bsanctuaire\b|\btemple\b/g, "jinja"],
+  [/\blycee\b/g, "koukou"],
+  [/\bsalle\s*communale\b|\bcentre\s*communautaire\b/g, "kaikan"],
+  [/\bparc\b|\bjardin\b/g, "kouen"],
+  [/\bdispensaire\b|\bclinique\b/g, "shinryoujo"]
 ];
 function normKeywordVariants(keyword){
-  const base = String(keyword || "").normalize("NFKC").toLowerCase().trim();
+  const base = String(keyword || "").normalize("NFKC").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").normalize("NFC").trim();
   const variants = new Set([normSearch(base)]);
   let aliased = base;
+  // フランス語の語順（gare de Tsuwano → Tsuwano eki）と前置詞を吸収
+  aliased = aliased.replace(/\b(gare|mairie|hopital|lycee)\s+(?:de la |de l'|du |des |de |d')?\s*([a-z][a-z ]*)$/, (m, w, rest) => (/^routiere/.test(rest) ? m : `${rest} ${w}`));
   EN_ALIASES.forEach(([re, to]) => { aliased = aliased.replace(re, to); });
   if (aliased !== base) variants.add(normSearch(aliased));
   return Array.from(variants).filter(Boolean);
@@ -1204,7 +1253,7 @@ function searchStops(keyword){
 }
 
 function renderShortcuts(){
-  const html = SHORTCUTS.map(k => `<div class="shortcutChip" data-kw="${k.ja}">${lang === "ja" ? k.ja : k.en}</div>`).join("");
+  const html = SHORTCUTS.map(k => `<div class="shortcutChip" data-kw="${k.ja}">${k[lang] || k.en}</div>`).join("");
   document.getElementById("shortcutRow").innerHTML = html;
   document.getElementById("shortcutRow2").innerHTML = html;
   document.querySelectorAll("#shortcutRow .shortcutChip").forEach(el => { el.onclick = () => { document.getElementById("searchBox").value = el.dataset.kw; runTopSearch(el.dataset.kw); }; });
