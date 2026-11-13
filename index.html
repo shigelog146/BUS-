@@ -566,6 +566,16 @@ function mountIcons(){
 //=====================================================
 // 多言語（UI文言のみ。バス停・路線名等の原データは日本語のまま）
 //=====================================================
+// 残り分数の表示（60分以上は「◯時間◯分」形式）
+function fmtRemain(m, l){
+  m = Math.round(m);
+  if (m < 60) return l==="ja" ? `${m}分` : `${m} min`;
+  const h = Math.floor(m/60), r = m % 60;
+  if (l==="ja") return r ? `${h}時間${r}分` : `${h}時間`;
+  if (l==="fr") return r ? `${h} h ${r} min` : `${h} h`;
+  return r ? `${h} h ${r} min` : `${h} h`;
+}
+
 const I18N = {
   ja: {
     brand:"バスナビ", place:"津和野町",
@@ -586,7 +596,7 @@ const I18N = {
     stepCurrent:"現在地", stepBoard:"乗車", stepAlight:"降車", stepArrive:"到着",
     nearYou:(name)=>`あなたは ${name} の近くにいます`,
     boardAt:(name)=>`${name} から乗車`,
-    departure:(t,m)=>`発車 ${t}（あと${m}分）`,
+    departure:(t,m)=>`発車 ${t}（あと${fmtRemain(m,"ja")}）`,
     stopsAhead:(n)=>`${n}駅先で降車`,
     alightAt:(name)=>`${name} で降ります`,
     arriveAt:(name)=>`目的地「${name}」に到着`,
@@ -596,7 +606,7 @@ const I18N = {
     toastGpsFail:"GPSを取得できませんでした。町の中心地を表示します。",
     toastDataFail:"データの取得に失敗しました",
     toastDestSet:(name)=>`目的地を「${name}」に設定しました`,
-    nextBusOver:"本日終了", inMin:(m)=>`あと ${m} 分`, terminus:(name)=>`終点：${name}`,
+    nextBusOver:"本日終了", inMin:(m)=>`あと ${fmtRemain(m,"ja")}`, terminus:(name)=>`終点：${name}`,
     walkPrefix:"現在地から", langSwitchToast:"表示言語を日本語にしました",
     nextStopLabel:"次のバス停", nextNextLabel:"その次", terminusHere:"この便はここが終点です",
     showRestBtn:(n)=>`この先 ${n} 件を終点まで表示`, hideRestBtn:"閉じる", termTag:"終点",
@@ -621,7 +631,7 @@ const I18N = {
     stepCurrent:"Current location", stepBoard:"Board", stepAlight:"Alight", stepArrive:"Arrive",
     nearYou:(name)=>`You're near ${name}`,
     boardAt:(name)=>`Board at ${name}`,
-    departure:(t,m)=>`Departs ${t} (in ${m} min)`,
+    departure:(t,m)=>`Departs ${t} (in ${fmtRemain(m,"en")})`,
     stopsAhead:(n)=>`Get off ${n} stop(s) later`,
     alightAt:(name)=>`Get off at ${name}`,
     arriveAt:(name)=>`Arrive at "${name}"`,
@@ -631,7 +641,7 @@ const I18N = {
     toastGpsFail:"Couldn't get GPS location. Showing town center instead.",
     toastDataFail:"Failed to load data",
     toastDestSet:(name)=>`Destination set to "${name}"`,
-    nextBusOver:"No more today", inMin:(m)=>`in ${m} min`, terminus:(name)=>`Terminus: ${name}`,
+    nextBusOver:"No more today", inMin:(m)=>`in ${fmtRemain(m,"en")}`, terminus:(name)=>`Terminus: ${name}`,
     walkPrefix:"From your location:", langSwitchToast:"Display language set to English",
     nextStopLabel:"Next stop", nextNextLabel:"Then", terminusHere:"This trip ends at this stop",
     showRestBtn:(n)=>`Show ${n} more stops to the terminus`, hideRestBtn:"Hide", termTag:"End",
@@ -656,7 +666,7 @@ const I18N = {
     stepCurrent:"Position actuelle", stepBoard:"Montée", stepAlight:"Descente", stepArrive:"Arrivée",
     nearYou:(name)=>`Vous êtes près de ${name}`,
     boardAt:(name)=>`Montez à ${name}`,
-    departure:(t,m)=>`Départ ${t} (dans ${m} min)`,
+    departure:(t,m)=>`Départ ${t} (dans ${fmtRemain(m,"fr")})`,
     stopsAhead:(n)=>`Descendez ${n} arrêt(s) plus loin`,
     alightAt:(name)=>`Descendez à ${name}`,
     arriveAt:(name)=>`Arrivée à « ${name} »`,
@@ -666,7 +676,7 @@ const I18N = {
     toastGpsFail:"Impossible d'obtenir la position GPS. Affichage du centre-ville.",
     toastDataFail:"Échec du chargement des données",
     toastDestSet:(name)=>`Destination définie : « ${name} »`,
-    nextBusOver:"Terminé pour aujourd'hui", inMin:(m)=>`dans ${m} min`, terminus:(name)=>`Terminus : ${name}`,
+    nextBusOver:"Terminé pour aujourd'hui", inMin:(m)=>`dans ${fmtRemain(m,"fr")}`, terminus:(name)=>`Terminus : ${name}`,
     walkPrefix:"Depuis votre position :", langSwitchToast:"Langue d'affichage : français",
     nextStopLabel:"Arrêt suivant", nextNextLabel:"Ensuite", terminusHere:"Ce trajet se termine à cet arrêt",
     showRestBtn:(n)=>`Afficher les ${n} arrêts suivants jusqu'au terminus`, hideRestBtn:"Masquer", termTag:"Terminus",
