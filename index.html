@@ -244,6 +244,7 @@ if (typeof supabase === "undefined") document.write('<script src="https://unpkg.
   .directionCard .dDir{font-size:16px; font-weight:800; line-height:1.25;}
   .directionCard .dRoute{font-size:11.5px; opacity:.85; margin-top:1px;}
   .directionCard .dDest{font-size:11.5px; opacity:.92; margin-top:3px;}
+  .directionCard .dFare{font-size:12.5px; font-weight:700; margin-top:3px;}
   .directionCard .dNext{
     padding:10px 14px; display:flex; align-items:baseline; gap:8px;
     background:var(--bg);
@@ -606,6 +607,7 @@ const I18N = {
     toastGpsFail:"GPSを取得できませんでした。町の中心地を表示します。",
     toastDataFail:"データの取得に失敗しました",
     toastDestSet:(name)=>`目的地を「${name}」に設定しました`,
+    fareLine:(y)=>`運賃 ${fmtYen(y)}円`,
     nextBusOver:"本日終了", inMin:(m)=>`あと ${fmtRemain(m,"ja")}`, terminus:(name)=>`終点：${name}`,
     walkPrefix:"現在地から", langSwitchToast:"表示言語を日本語にしました",
     nextStopLabel:"次のバス停", nextNextLabel:"その次", terminusHere:"この便はここが終点です",
@@ -641,6 +643,7 @@ const I18N = {
     toastGpsFail:"Couldn't get GPS location. Showing town center instead.",
     toastDataFail:"Failed to load data",
     toastDestSet:(name)=>`Destination set to "${name}"`,
+    fareLine:(y)=>`Fare ¥${fmtYen(y)}`,
     nextBusOver:"No more today", inMin:(m)=>`in ${fmtRemain(m,"en")}`, terminus:(name)=>`Terminus: ${name}`,
     walkPrefix:"From your location:", langSwitchToast:"Display language set to English",
     nextStopLabel:"Next stop", nextNextLabel:"Then", terminusHere:"This trip ends at this stop",
@@ -676,6 +679,7 @@ const I18N = {
     toastGpsFail:"Impossible d'obtenir la position GPS. Affichage du centre-ville.",
     toastDataFail:"Échec du chargement des données",
     toastDestSet:(name)=>`Destination définie : « ${name} »`,
+    fareLine:(y)=>`Tarif ${fmtYen(y)} ¥`,
     nextBusOver:"Terminé pour aujourd'hui", inMin:(m)=>`dans ${fmtRemain(m,"fr")}`, terminus:(name)=>`Terminus : ${name}`,
     walkPrefix:"Depuis votre position :", langSwitchToast:"Langue d'affichage : français",
     nextStopLabel:"Arrêt suivant", nextNextLabel:"Ensuite", terminusHere:"Ce trajet se termine à cet arrêt",
@@ -787,6 +791,55 @@ function nextBusInfo(times){
   });
   return { time: next || t("nextBusOver"), min: isFinite(min) ? Math.round(min) : null, index: idx };
 }
+//=====================================================
+// 運賃
+//=====================================================
+// 運賃表の対象外の路線（町営バス等）に使う均一運賃(円)。表示しない場合は null にする
+const FLAT_FARE_YEN = 200;
+// 運賃表が未対応の事業者の路線（均一運賃にせず、運賃は表示しない）。防長交通の運賃表を追加したら外す
+const FARE_UNSUPPORTED = /防長交通/;
+
+const FARE_IWAMI_TSUWANO = {
+  operator:"石見交通", line:"津和野線", revised:"2025-06-01",
+  // 停留所(上から津和野温泉…医光寺)。1要素に同一運賃帯の停留所名をまとめて持つ
+  stops:[["津和野温泉"], ["鷲原公園前･鷲原", "鷲原公園前", "鷲原", "風呂屋橋"], ["土木事業所前･新橋･清水", "土木事業所前", "新橋", "清水"], ["森･町田･鴎外旧居", "森", "町田", "鴎外旧居"], ["殿町･稲成下･郷土館前", "殿町", "稲成下", "郷土館前"], ["祇園丁･津和野駅", "祇園丁", "津和野駅"], ["上寺田"], ["下寺田"], ["下千原", "塩ヶ原"], ["耕田"], ["直地"], ["野広橋"], ["宮の前"], ["大畠"], ["滝元", "小直"], ["日原駅入口・木の口", "日原駅入口", "木の口"], ["日原駅"], ["枕瀬"], ["日原診療所前"], ["須川口･日原上市・日原", "須川口", "日原上市", "日原"], ["口屋橋"], ["野口"], ["日原道の駅・池村", "日原道の駅", "池村", "道の駅"], ["青原駅前","青原駅"], ["小瀬"], ["二俣橋", "程野"], ["下青原"], ["添谷橋"], ["三星"], ["大滝"], ["清流苑前"], ["横田駅・神田", "横田駅", "神田"], ["匹見口", "家下"], ["山本", "大境･養護学校前", "大境", "養護学校前"], ["安富"], ["羽場"], ["花ヶ瀬"], ["角井"], ["飯田口", "須子上"], ["須子・総合福祉センター", "須子", "総合福祉センター"], ["労働会館前"], ["益田駅", "図書館･市役所", "図書館", "市役所"], ["ｸﾞﾗﾝﾄﾜ･本社･幸町", "ｸﾞﾗﾝﾄﾜ", "本社", "幸町", "下市･本町", "下市", "本町", "グラントワ前", "石見交通本社", "グラントワ"], ["折戸･上市", "折戸", "上市", "堀川橋"], ["医光寺"]],
+  // tri[i][k] = stops[i]〜stops[k] (k<i) の運賃(円)
+  tri:[[], [160], [200, 160], [230, 160, 160], [280, 230, 160, 160], [320, 280, 160, 160, 160], [350, 310, 250, 210, 160, 160], [390, 350, 300, 250, 210, 160, 160], [420, 370, 320, 280, 240, 200, 160, 160], [520, 480, 430, 390, 360, 310, 290, 240, 210], [590, 540, 490, 430, 360, 320, 320, 310, 280, 160], [640, 610, 540, 470, 390, 340, 340, 340, 340, 260, 200], [640, 610, 540, 470, 420, 350, 350, 350, 350, 290, 220, 160], [640, 610, 540, 470, 420, 360, 360, 350, 350, 320, 260, 160, 160], [640, 610, 540, 480, 430, 370, 370, 360, 350, 350, 310, 200, 160, 160], [640, 610, 540, 490, 440, 370, 370, 370, 350, 350, 320, 260, 240, 190, 160], [640, 610, 540, 490, 440, 370, 370, 370, 360, 350, 320, 300, 260, 220, 170, 160], [640, 610, 580, 570, 480, 440, 440, 440, 430, 430, 350, 330, 310, 250, 220, 160, 160], [700, 680, 640, 630, 570, 490, 490, 490, 480, 480, 420, 360, 340, 280, 240, 190, 160, 160], [700, 680, 640, 630, 570, 490, 490, 490, 480, 480, 420, 360, 340, 280, 240, 190, 160, 160, 160], [720, 710, 680, 670, 610, 540, 540, 510, 510, 500, 480, 420, 360, 340, 280, 240, 230, 160, 160, 160], [730, 720, 700, 680, 620, 570, 570, 570, 540, 510, 490, 430, 420, 360, 330, 260, 250, 230, 220, 160, 160], [730, 720, 700, 690, 630, 580, 580, 580, 570, 570, 500, 500, 490, 450, 370, 340, 310, 310, 290, 260, 240, 200], [730, 720, 700, 690, 640, 600, 600, 580, 570, 570, 540, 540, 500, 490, 450, 360, 320, 320, 310, 310, 290, 290, 160], [780, 770, 730, 720, 680, 620, 620, 610, 600, 600, 580, 580, 580, 510, 490, 430, 360, 350, 350, 350, 340, 320, 220, 160], [840, 830, 800, 780, 710, 670, 670, 660, 640, 640, 620, 620, 620, 590, 510, 450, 370, 370, 370, 370, 370, 350, 250, 160, 160], [860, 850, 830, 800, 740, 700, 700, 680, 670, 640, 630, 630, 620, 600, 510, 460, 420, 420, 370, 370, 370, 360, 300, 210, 160, 160], [880, 870, 850, 830, 750, 710, 700, 700, 680, 670, 640, 640, 630, 600, 510, 460, 420, 420, 390, 390, 370, 360, 320, 230, 190, 160, 160], [900, 880, 850, 840, 780, 730, 730, 720, 720, 690, 670, 660, 660, 630, 610, 500, 450, 440, 440, 440, 430, 430, 360, 310, 260, 230, 190, 160], [950, 940, 900, 880, 810, 750, 740, 740, 720, 700, 670, 670, 670, 630, 610, 500, 470, 470, 460, 460, 450, 440, 370, 340, 330, 310, 250, 230, 160], [950, 950, 930, 900, 830, 780, 740, 740, 720, 700, 680, 680, 680, 660, 620, 510, 480, 480, 470, 470, 460, 450, 390, 340, 340, 330, 300, 260, 200, 160], [960, 950, 930, 910, 840, 790, 780, 780, 730, 710, 690, 690, 690, 670, 620, 510, 480, 480, 470, 470, 470, 450, 390, 340, 340, 330, 320, 260, 240, 160, 160], [990, 980, 960, 950, 860, 810, 800, 800, 800, 750, 730, 730, 710, 680, 660, 610, 510, 510, 500, 500, 490, 490, 440, 370, 370, 360, 350, 330, 290, 210, 160, 160], [1060, 1050, 1020, 1000, 930, 860, 860, 850, 850, 830, 790, 780, 750, 740, 700, 660, 610, 610, 600, 600, 600, 580, 480, 450, 450, 450, 420, 400, 330, 260, 220, 170, 160], [1090, 1090, 1060, 1050, 980, 910, 910, 910, 910, 880, 830, 830, 830, 800, 750, 700, 660, 660, 660, 660, 630, 630, 570, 490, 480, 480, 470, 440, 380, 320, 280, 240, 200, 160], [1100, 1090, 1070, 1060, 990, 930, 930, 930, 910, 910, 880, 880, 880, 840, 800, 740, 690, 690, 690, 690, 690, 660, 610, 570, 570, 540, 500, 480, 420, 360, 320, 280, 240, 190, 160], [1100, 1090, 1070, 1060, 1000, 950, 950, 930, 930, 910, 900, 900, 900, 860, 830, 750, 720, 720, 710, 710, 700, 680, 630, 600, 600, 580, 510, 480, 450, 390, 350, 320, 280, 220, 160, 160], [1100, 1090, 1070, 1060, 1020, 960, 960, 950, 950, 930, 910, 900, 900, 860, 840, 780, 740, 740, 720, 720, 720, 700, 640, 620, 620, 610, 510, 480, 470, 450, 390, 330, 330, 330, 290, 240, 210], [1140, 1140, 1100, 1080, 1020, 990, 990, 990, 960, 950, 950, 930, 930, 900, 860, 800, 740, 740, 730, 730, 730, 700, 660, 630, 620, 610, 510, 490, 470, 450, 390, 340, 340, 340, 330, 300, 250, 160], [1140, 1140, 1100, 1080, 1030, 990, 990, 990, 980, 960, 960, 950, 950, 910, 880, 810, 750, 750, 730, 730, 730, 710, 660, 630, 620, 610, 510, 490, 480, 460, 390, 340, 340, 340, 340, 330, 300, 170, 160], [1140, 1140, 1100, 1080, 1030, 990, 990, 990, 990, 980, 960, 960, 950, 930, 880, 810, 780, 750, 740, 740, 730, 710, 670, 630, 620, 610, 540, 490, 480, 460, 420, 340, 340, 340, 340, 340, 330, 220, 160, 160], [1140, 1140, 1100, 1080, 1030, 990, 990, 990, 990, 980, 960, 960, 950, 930, 880, 810, 780, 750, 740, 740, 730, 710, 670, 630, 620, 610, 540, 490, 480, 460, 420, 340, 340, 340, 340, 340, 340, 240, 190, 160, 160], [1170, 1160, 1140, 1130, 1050, 1030, 1030, 1030, 1030, 1020, 1000, 990, 990, 990, 950, 860, 810, 810, 790, 790, 780, 740, 700, 670, 670, 660, 610, 510, 510, 490, 460, 390, 390, 390, 370, 370, 370, 310, 250, 220, 170, 160], [1220, 1210, 1190, 1170, 1110, 1080, 1080, 1080, 1080, 1080, 1060, 1060, 1060, 1050, 1020, 950, 880, 880, 850, 850, 840, 810, 750, 720, 720, 710, 670, 630, 620, 600, 500, 470, 470, 470, 450, 450, 440, 350, 280, 240, 230, 210, 160], [1220, 1210, 1190, 1170, 1110, 1080, 1080, 1080, 1080, 1080, 1060, 1060, 1060, 1050, 1020, 950, 880, 880, 850, 850, 840, 810, 750, 720, 720, 710, 670, 630, 620, 600, 500, 470, 470, 470, 450, 450, 440, 350, 290, 240, 240, 230, 160, 160]]
+};
+
+// 事業者ごとの運賃表。防長交通などを追加するときは、同じ形式のデータ(stops/tri)を作って
+// ここに { id, routePattern, data } を1件足すだけでよい。
+// routePattern は Supabase の route_name にマッチさせる正規表現。
+const FARE_TABLES = [
+  { id:"iwami_tsuwano", routePattern:/^津和野線$/, data:FARE_IWAMI_TSUWANO }
+];
+
+// 停留所名の表記ゆれ（半角カナ・記号・鴎/鷗・ケ/ヶ・ノ/の・空白）を吸収
+function normFareName(name){
+  return String(name || "").normalize("NFKC")
+    .replace(/[\s\u3000・･]/g, "")
+    .replace(/[鴎鷗]/g, "鷗").replace(/[ヶケ]/g, "ヶ").replace(/ノ/g, "の");
+}
+function buildFareIndex(table){
+  if (table._idx) return table._idx;
+  const idx = new Map();
+  table.data.stops.forEach((names, i) => names.forEach(n => {
+    const k = normFareName(n);
+    if (k && !idx.has(k)) idx.set(k, i);
+  }));
+  return (table._idx = idx);
+}
+// 戻り値: 運賃(円) / 運賃表の対象路線で停留所が見つからない場合は null
+function fareLookup(routeName, fromName, toName){
+  const table = FARE_TABLES.find(tb => tb.routePattern.test(String(routeName || "")));
+  if (!table) return FARE_UNSUPPORTED.test(String(routeName || "")) ? null : FLAT_FARE_YEN;
+  const idx = buildFareIndex(table);
+  const a = idx.get(normFareName(fromName)), b = idx.get(normFareName(toName));
+  if (a === undefined || b === undefined || a === b) return null;
+  return table.data.tri[Math.max(a, b)][Math.min(a, b)];
+}
+function fmtYen(y){ return Number(y).toLocaleString("en-US"); }
+
 function walkInfo(meters){
   const min = Math.max(1, Math.round(meters / WALK_M_PER_MIN));
   const distText = meters < 1000 ? `${Math.round(meters)}m` : `${(meters/1000).toFixed(1)}km`;
@@ -1124,6 +1177,13 @@ function openDetail(stopKey, keepState){
     const dest = next.index >= 0 ? (tripDestinationMap.get(tripKey) || "-") : "-";
     const isPast = next.index < 0;
 
+    // 目的地が設定されていて、この路線がそこへ行く場合は運賃を表示
+    let fareHtml = "";
+    if (destinationStop && destinationStop.key !== stop.key && routeReachesDestination(r, stop, destinationStop)) {
+      const fy = fareLookup(r.route, stop.stop_name, destinationStop.stop_name);
+      if (fy != null) fareHtml = `<div class="dFare">${t("fareLine", fy)}</div>`;
+    }
+
     const chips = times.map((tm, i) => `<span class="ttChip ${i === next.index ? "next" : ""}">${tm || "-"}</span>`).join("");
 
     // 次／その次のバス停（＋終点まで展開ボタン）
@@ -1157,6 +1217,7 @@ function openDetail(stopKey, keepState){
             <div class="dDir">${r.direction}</div>
             <div class="dRoute">${r.route}</div>
             ${dest !== "-" ? `<div class="dDest">${t("terminus", displayStopName(dest))}</div>` : ""}
+            ${fareHtml}
           </div>
         </div>
         ${nextStopsHtml}
@@ -1380,7 +1441,7 @@ function findBestTrip(fromStopName, toStopName){
     if (diff === null || diff <= 0) return;
 
     const [route, direction] = key.split("|");
-    const candidate = { route, direction, boardTime: boardPoint.time, minUntil: Math.round(diff), stopsBetween: toIdx - fromIdx, alightStop: toStopName, destination: tripDestinationMap.get(key) || toStopName };
+    const candidate = { route, direction, boardTime: boardPoint.time, minUntil: Math.round(diff), stopsBetween: toIdx - fromIdx, alightStop: toStopName, fare: fareLookup(route, fromStopName, toStopName), destination: tripDestinationMap.get(key) || toStopName };
     if (!best || candidate.minUntil < best.minUntil) best = candidate;
   });
   return best;
@@ -1414,6 +1475,7 @@ function openNavScreen(){
         <div class="stepMain">${t("boardAt", displayStopName(nearestStop.stop_name))}</div>
         <div class="navBoardBadge" style="background:${color}22;color:${color};">${ico("arrowRight","icon icon-sm")} ${trip.direction}（${trip.route}）</div>
         <div class="stepSub">${t("departure", trip.boardTime, trip.minUntil)}</div>
+        ${trip.fare != null ? `<div class="stepSub" style="font-weight:700;">${t("fareLine", trip.fare)}</div>` : ""}
       </div>
       <div class="navStep">
         <div class="stepLabel">${t("stepAlight")}</div>
