@@ -357,6 +357,8 @@ if (typeof supabase === "undefined") document.write('<script src="https://unpkg.
   .nsLabel{flex:none; font-size:11.5px; color:var(--muted); min-width:4.6em;}
   .nsName{flex:1; min-width:0; font-size:15px; font-weight:800; color:var(--ink); overflow-wrap:anywhere;}
   .nsEnd{font-size:12.5px; font-weight:700; color:var(--muted); padding:4px 0;}
+  .nsFare{flex:none; margin-left:auto; padding:1px 7px; border-radius:9px; background:rgba(0,0,0,.06); font-size:12.5px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .nsFare + .nsTime{margin-left:0;}
   .nsTime{flex:none; margin-left:auto; padding-left:8px; font-size:15px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:.2px;}
   .nsRow.isTerm .nsTime{color:var(--c,#2f6fed);}
   .nsMore{display:none;}
@@ -607,7 +609,7 @@ const I18N = {
     toastGpsFail:"GPSを取得できませんでした。町の中心地を表示します。",
     toastDataFail:"データの取得に失敗しました",
     toastDestSet:(name)=>`目的地を「${name}」に設定しました`,
-    fareLine:(y)=>`運賃 ${fmtYen(y)}円`,
+    fareLine:(y)=>`運賃 ${fmtYen(y)}円`, fareFlat:(y)=>`運賃 ${fmtYen(y)}円（均一）`,
     nextBusOver:"本日終了", inMin:(m)=>`あと ${fmtRemain(m,"ja")}`, terminus:(name)=>`終点：${name}`,
     walkPrefix:"現在地から", langSwitchToast:"表示言語を日本語にしました",
     nextStopLabel:"次のバス停", nextNextLabel:"その次", terminusHere:"この便はここが終点です",
@@ -643,7 +645,7 @@ const I18N = {
     toastGpsFail:"Couldn't get GPS location. Showing town center instead.",
     toastDataFail:"Failed to load data",
     toastDestSet:(name)=>`Destination set to "${name}"`,
-    fareLine:(y)=>`Fare ¥${fmtYen(y)}`,
+    fareLine:(y)=>`Fare ¥${fmtYen(y)}`, fareFlat:(y)=>`Flat fare ¥${fmtYen(y)}`,
     nextBusOver:"No more today", inMin:(m)=>`in ${fmtRemain(m,"en")}`, terminus:(name)=>`Terminus: ${name}`,
     walkPrefix:"From your location:", langSwitchToast:"Display language set to English",
     nextStopLabel:"Next stop", nextNextLabel:"Then", terminusHere:"This trip ends at this stop",
@@ -679,7 +681,7 @@ const I18N = {
     toastGpsFail:"Impossible d'obtenir la position GPS. Affichage du centre-ville.",
     toastDataFail:"Échec du chargement des données",
     toastDestSet:(name)=>`Destination définie : « ${name} »`,
-    fareLine:(y)=>`Tarif ${fmtYen(y)} ¥`,
+    fareLine:(y)=>`Tarif ${fmtYen(y)} ¥`, fareFlat:(y)=>`Tarif unique ${fmtYen(y)} ¥`,
     nextBusOver:"Terminé pour aujourd'hui", inMin:(m)=>`dans ${fmtRemain(m,"fr")}`, terminus:(name)=>`Terminus : ${name}`,
     walkPrefix:"Depuis votre position :", langSwitchToast:"Langue d'affichage : français",
     nextStopLabel:"Arrêt suivant", nextNextLabel:"Ensuite", terminusHere:"Ce trajet se termine à cet arrêt",
@@ -832,11 +834,16 @@ function buildFareIndex(table){
 // 戻り値: 運賃(円) / 運賃表の対象路線で停留所が見つからない場合は null
 function fareLookup(routeName, fromName, toName){
   const table = FARE_TABLES.find(tb => tb.routePattern.test(String(routeName || "")));
-  if (!table) return FARE_UNSUPPORTED.test(String(routeName || "")) ? null : FLAT_FARE_YEN;
+  if (!table) return isFlatFareRoute(routeName) ? FLAT_FARE_YEN : null;
   const idx = buildFareIndex(table);
   const a = idx.get(normFareName(fromName)), b = idx.get(normFareName(toName));
   if (a === undefined || b === undefined || a === b) return null;
   return table.data.tri[Math.max(a, b)][Math.min(a, b)];
+}
+// 運賃表がなく、均一運賃を適用する路線か
+function isFlatFareRoute(routeName){
+  const r = String(routeName || "");
+  return FLAT_FARE_YEN != null && !FARE_TABLES.some(tb => tb.routePattern.test(r)) && !FARE_UNSUPPORTED.test(r);
 }
 function fmtYen(y){ return Number(y).toLocaleString("en-US"); }
 
@@ -1179,7 +1186,9 @@ function openDetail(stopKey, keepState){
 
     // 目的地が設定されていて、この路線がそこへ行く場合は運賃を表示
     let fareHtml = "";
-    if (destinationStop && destinationStop.key !== stop.key && routeReachesDestination(r, stop, destinationStop)) {
+    if (isFlatFareRoute(r.route)) {
+      fareHtml = `<div class="dFare">${t("fareFlat", FLAT_FARE_YEN)}</div>`;
+    } else if (destinationStop && destinationStop.key !== stop.key && routeReachesDestination(r, stop, destinationStop)) {
       const fy = fareLookup(r.route, stop.stop_name, destinationStop.stop_name);
       if (fy != null) fareHtml = `<div class="dFare">${t("fareLine", fy)}</div>`;
     }
@@ -1198,7 +1207,7 @@ function openDetail(stopKey, keepState){
         const tail = rest.slice(2);
         const expanded = detailExpanded.has(cardIdx);
         const mkKey = (p) => `${p.stop_name}|${p.lat}|${p.lng}`;
-        const rowHtml = (p, i, isLast) => `<div class="nsRow${isLast && rest.length > 2 ? " isTerm" : ""}"><span class="nsBadge${i + 1 >= 10 ? " small" : ""}">${i + 1}</span><span class="nsLabel">${i < 2 ? labels[i] : ""}</span><span class="nsName" data-term="${t("termTag")}">${escapeHtml(displayStopName(p.stop_name))}</span><span class="nsTime">${p.time ? escapeHtml(String(p.time).trim()) : ""}</span></div>`;
+        const rowHtml = (p, i, isLast) => `<div class="nsRow${isLast && rest.length > 2 ? " isTerm" : ""}"><span class="nsBadge${i + 1 >= 10 ? " small" : ""}">${i + 1}</span><span class="nsLabel">${i < 2 ? labels[i] : ""}</span><span class="nsName" data-term="${t("termTag")}">${escapeHtml(displayStopName(p.stop_name))}</span>${(() => { const fy = fareLookup(r.route, stop.stop_name, p.stop_name); return fy != null ? `<span class="nsFare">${fmtYen(fy)}${lang === "ja" ? "円" : ""}</span>` : ""; })()}<span class="nsTime">${p.time ? escapeHtml(String(p.time).trim()) : ""}</span></div>`;
         head.forEach((p, i) => { const k = mkKey(p); if (!hlMap.has(k) || hlMap.get(k).rank > i + 1) hlMap.set(k, { rank: i + 1, color }); });
         tail.forEach((p, j) => { if (expanded) extraHl.push({ k: mkKey(p), rank: j + 3, color }); });
         nextStopsHtml = `<div class="nextStops" style="--c:${color}">`
