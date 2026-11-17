@@ -1027,23 +1027,45 @@ function refreshNearestCardText(){
   document.getElementById("nearestWalk").textContent = `${w.distText}・${w.timeText}`;
 }
 
+// 自分に一番近いバス停を求める。行先が設定されている場合は「行先まで行ける便がある」バス停の中から選ぶ
+// (該当がなければ従来どおり単純に一番近いバス停)
+function updateNearestStop(){
+  if (!myPos) return;
+  const pick = (needReach) => {
+    let best = null, bestDist = Infinity;
+    stopsList.forEach(s => {
+      if (needReach) {
+        if (destinationStop.key === s.key) return;
+        if (!s.routes.some(r => routeReachesDestination(r, s, destinationStop))) return;
+      }
+      const d = distance(myPos.lat, myPos.lng, s.lat, s.lng);
+      if (d < bestDist) { bestDist = d; best = s; }
+    });
+    return { best, bestDist };
+  };
+  let res = destinationStop ? pick(true) : null;
+  if (!res || !res.best) res = pick(false);
+  nearestStop = res.best;
+  lastWalkMeters = res.bestDist;
+  if (nearestStop) {
+    refreshNearestCardText();
+    document.getElementById("nearestCard").style.display = destinationStop ? "none" : "flex";
+  }
+}
+
+// 最寄り(赤)のバス停にフォーカス。現在地があれば現在地と一緒に収める
+function focusNearestStop(){
+  if (!nearestStop) return;
+  if (myPos) map.fitBounds([[myPos.lat,myPos.lng],[nearestStop.lat,nearestStop.lng]], { padding:[80,80], maxZoom:17 });
+  else map.setView([nearestStop.lat, nearestStop.lng], 16);
+}
+
 function refreshCurrentAndNearest(){
   if (!myPos) return;
   if (currentMarker) map.removeLayer(currentMarker);
   currentMarker = L.marker([myPos.lat, myPos.lng], { icon: meIcon() }).addTo(map);
 
-  let best = null, bestDist = Infinity;
-  stopsList.forEach(s => {
-    const d = distance(myPos.lat, myPos.lng, s.lat, s.lng);
-    if (d < bestDist) { bestDist = d; best = s; }
-  });
-  nearestStop = best;
-  lastWalkMeters = bestDist;
-
-  if (nearestStop) {
-    refreshNearestCardText();
-    document.getElementById("nearestCard").style.display = destinationStop ? "none" : "flex";
-  }
+  updateNearestStop();
 
   renderAllMarkers();
   drawRouteLineIfNeeded();
@@ -1380,16 +1402,18 @@ function pickDestinationFromSearch(stop){
 
 function setDestination(stop){
   destinationStop = stop;
-  renderAllMarkers();
-  drawRouteLineIfNeeded();
   document.getElementById("navCtaText").textContent = displayStopName(stop.stop_name);
   document.getElementById("navCta").classList.add("show");
   document.getElementById("nearestCard").style.display = "none";
-  if (myPos) map.fitBounds([[myPos.lat,myPos.lng],[stop.lat,stop.lng]], { padding:[60,60] });
+  updateNearestStop();
+  renderAllMarkers();
+  drawRouteLineIfNeeded();
+  focusNearestStop();
 }
 
 function clearDestination(){
   destinationStop = null;
+  updateNearestStop();
   renderAllMarkers();
   drawRouteLineIfNeeded();
   document.getElementById("navCta").classList.remove("show");
