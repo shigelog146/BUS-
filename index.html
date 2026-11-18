@@ -1814,12 +1814,13 @@ function searchJourney(startMin, destKeys){
             cur.set(p.key, lbl);
             improved.push(lbl);
           }
-        } else {
-          const pl = cum.get(p.key);
-          if (pl) {
-            const buf = pl.kind === "ride" ? TRANSFER_BUF_MIN : 0;
-            if (pl.t + buf <= p.t) { boarded = true; bPos = pos; bLabel = pl; }
-          }
+        }
+        // 乗車できるバス停の判定。すでに乗車済みでも、前のバスを「より早く降りられる」バス停がこの便の
+        // 途中にあれば、そこで乗り換える（到着時刻は同じなので、前のバスの余分な乗車を避ける）
+        const pl = cum.get(p.key);
+        if (pl) {
+          const buf = pl.kind === "ride" ? TRANSFER_BUF_MIN : 0;
+          if (pl.t + buf <= p.t && (!boarded || pl.t < bLabel.t)) { boarded = true; bPos = pos; bLabel = pl; }
         }
       }
     });
