@@ -265,6 +265,11 @@ if (typeof supabase === "undefined") document.write('<script src="https://unpkg.
 
   /* ===== Nav screen ===== */
   #navScreen .sheetBody{padding:18px 18px 30px;}
+  .optLabel{font-size:12px; font-weight:800; color:var(--muted); margin:10px 0 6px;}
+  .optRow{display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px;}
+  .optChip{flex:none; text-align:left; padding:8px 12px; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:13px; cursor:pointer; max-width:240px;}
+  .optChip.active{border-color:#155e9c; background:#155e9c14; box-shadow:0 0 0 1px #155e9c inset;}
+  .optChip .optRoutes{display:block; margin-top:3px; font-size:11.5px; color:var(--muted); white-space:normal;}
   /* ===== ナビ画面：乗車区間の途中バス停と運賃 ===== */
   .viaBox{margin-top:8px; border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden;}
   .viaBox summary{cursor:pointer; padding:9px 12px; font-size:13px; font-weight:800; color:var(--c,#2f6fed); list-style:none; display:flex; align-items:center; justify-content:space-between;}
@@ -652,7 +657,7 @@ const I18N = {
     boardAt:(name)=>`${name} から乗車`,
     departure:(t,m)=>`発車 ${t}（あと${fmtRemain(m,"ja")}）`,
     stopsAhead:(n)=>`${n}駅先で降車`,
-    viaStops:(n)=>`途中のバス停 ${n}か所`, viaFareNote:"運賃は乗車バス停からの金額", viaAlightTag:"降車",
+    viaStops:(n)=>`途中のバス停 ${n}か所`, viaFareNote:"運賃は乗車バス停からの金額", viaAlightTag:"降車", routeOptions:"ルート候補（乗り継ぎ路線）",
     alightAt:(name)=>`${name} で降ります`,
     arriveAt:(name)=>`目的地「${name}」に到着`,
     noDirect:"直通の便が見つかりませんでした",
@@ -704,7 +709,7 @@ const I18N = {
     boardAt:(name)=>`Board at ${name}`,
     departure:(t,m)=>`Departs ${t} (in ${fmtRemain(m,"en")})`,
     stopsAhead:(n)=>`Get off ${n} stop(s) later`,
-    viaStops:(n)=>`${n} stop(s) in between`, viaFareNote:"Fares are from the boarding stop", viaAlightTag:"Exit",
+    viaStops:(n)=>`${n} stop(s) in between`, viaFareNote:"Fares are from the boarding stop", viaAlightTag:"Exit", routeOptions:"Route options (incl. transfers)",
     alightAt:(name)=>`Get off at ${name}`,
     arriveAt:(name)=>`Arrive at "${name}"`,
     noDirect:"No direct bus found",
@@ -756,7 +761,7 @@ const I18N = {
     boardAt:(name)=>`Montez à ${name}`,
     departure:(t,m)=>`Départ ${t} (dans ${fmtRemain(m,"fr")})`,
     stopsAhead:(n)=>`Descendez ${n} arrêt(s) plus loin`,
-    viaStops:(n)=>`${n} arrêt(s) intermédiaire(s)`, viaFareNote:"Tarifs depuis l'arrêt de montée", viaAlightTag:"Sortie",
+    viaStops:(n)=>`${n} arrêt(s) intermédiaire(s)`, viaFareNote:"Tarifs depuis l'arrêt de montée", viaAlightTag:"Sortie", routeOptions:"Itinéraires (avec correspondances)",
     alightAt:(name)=>`Descendez à ${name}`,
     arriveAt:(name)=>`Arrivée à « ${name} »`,
     noDirect:"Aucun bus direct trouvé",
@@ -1711,11 +1716,15 @@ function planJourney(){
   const destKeys = new Set(stopsList.filter(s => s.stop_name === destinationStop.stop_name).map(s => s.key));
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-  let r = searchJourney(nowMin, destKeys);
-  if (r) { r.tomorrow = false; r.nowMin = nowMin; return r; }
-  r = searchJourney(0, destKeys);            // 本日の便で行けない場合は、明日の始発から探す
-  if (r) { r.tomorrow = true; r.nowMin = 0; }
-  return r;
+  let list = searchJourney(nowMin, destKeys);
+  let tomorrow = false, base = nowMin;
+  if (!list) {
+    list = searchJourney(0, destKeys);       // 本日の便で行けない場合は、明日の始発から探す
+    tomorrow = true; base = 0;
+  }
+  if (!list) return null;
+  list.forEach(j => { j.tomorrow = tomorrow; j.nowMin = base; j.options = list; });
+  return list[0];
 }
 
 // ラウンドベースの最早到着探索（RAPTOR方式）。k 回目のラウンド＝k 本目のバスまで使う
@@ -1787,7 +1796,7 @@ function searchJourney(startMin, destKeys){
   if (!cands.length) return null;
   const score = x => x.j.arrival + (x.k - 1) * TRANSFER_PENALTY_MIN + x.j.startWalkMin * WALK_WEIGHT;
   cands.sort((a, b) => score(a) - score(b) || a.k - b.k);
-  return cands[0].j;
+  return cands.map(c => c.j);   // 先頭が最良。残りは乗り継ぎ回数の異なる別ルート
 }
 
 // ラベルのつながりを逆にたどって、区間(leg)のリストにする
@@ -1885,6 +1894,21 @@ function recomputeJourney(){
   updateNavCta();
 }
 
+// 経路候補（直通／乗換あり）を切り替える
+function selectJourney(opt){
+  journey = opt;
+  if (journey.boardStop) {
+    nearestStop = journey.boardStop;
+    lastWalkMeters = journey.startWalkM;
+    refreshNearestCardText();
+  }
+  drawJourney();
+  renderAllMarkers();
+  drawRouteLineIfNeeded();
+  updateNavCta();
+  openNavScreen();
+}
+
 function updateNavCta(){
   if (!destinationStop) return;
   let txt = displayStopName(destinationStop.stop_name);
@@ -1926,6 +1950,13 @@ function openNavScreen(){
       ${fareText ? `<span>${fareText}</span>` : ""}
     </div>`;
   if (j.tomorrow) html += `<div class="journeyNote">${t("tomorrowNote")}</div>`;
+  if (j.options && j.options.length > 1) {
+    html += `<div class="optLabel">${t("routeOptions")}</div><div class="optRow">` + j.options.map((o, oi) => {
+      const names = o.legs.map(l => escapeHtml(l.route)).join(" → ");
+      const f = o.fareTotal > 0 ? ` ・${fmtYen(o.fareTotal)}${lang === "ja" ? "円" : ""}${o.fareUnknown ? "+" : ""}` : "";
+      return `<button class="optChip${o === j ? " active" : ""}" data-i="${oi}"><b>${t("transferCount", o.transfers)}</b> ${fmtClock(o.legs[0].boardTime)}→${fmtClock(o.arrival)}${f}<span class="optRoutes">${names}</span></button>`;
+    }).join("") + `</div>`;
+  }
 
   html += `<div class="navStepList">`;
 
@@ -1982,6 +2013,7 @@ function openNavScreen(){
   html += `</div>`;
 
   body.innerHTML = html;
+  body.querySelectorAll(".optChip").forEach(b => { b.onclick = () => { const o = j.options[Number(b.dataset.i)]; if (o && o !== j) selectJourney(o); }; });
   const gBtn = document.getElementById("googleWalkBtn");
   const op = originPos();
   if (gBtn && op) gBtn.onclick = () => openGoogleWalkNav(op.lat, op.lng, first.pts[0].lat, first.pts[0].lng);
