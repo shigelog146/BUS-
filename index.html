@@ -265,6 +265,23 @@ if (typeof supabase === "undefined") document.write('<script src="https://unpkg.
 
   /* ===== Nav screen ===== */
   #navScreen .sheetBody{padding:18px 18px 30px;}
+  /* ===== ナビ画面：乗車区間の途中バス停と運賃 ===== */
+  .viaBox{margin-top:8px; border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden;}
+  .viaBox summary{cursor:pointer; padding:9px 12px; font-size:13px; font-weight:800; color:var(--c,#2f6fed); list-style:none; display:flex; align-items:center; justify-content:space-between;}
+  .viaBox summary::-webkit-details-marker{display:none;}
+  .viaBox summary::after{content:"▾"; font-size:12px; transition:transform .15s;}
+  .viaBox:not([open]) summary::after{transform:rotate(-90deg);}
+  .viaList{padding:2px 12px 8px;}
+  .viaRow{display:flex; align-items:center; gap:8px; padding:5px 0; position:relative; font-size:14px;}
+  .viaRow + .viaRow::before{content:""; position:absolute; left:4px; top:-7px; width:2px; height:12px; background:var(--c,#2f6fed); opacity:.45;}
+  .viaDot{flex:none; width:10px; height:10px; border-radius:50%; background:var(--c,#2f6fed);}
+  .viaRow.isAlight .viaDot{background:#fff; border:2px solid var(--c,#2f6fed); width:10px; height:10px; box-sizing:border-box;}
+  .viaName{flex:1; min-width:0; font-weight:700; overflow-wrap:anywhere;}
+  .viaRow.isAlight .viaName{font-weight:800;}
+  .viaRow.isAlight .viaName::after{content:attr(data-tag); margin-left:6px; font-size:11px; font-weight:800; color:#fff; background:var(--c,#2f6fed); padding:1px 7px; border-radius:9px;}
+  .viaFare{flex:none; padding:1px 7px; border-radius:9px; background:rgba(0,0,0,.06); font-size:12.5px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .viaTime{flex:none; min-width:3.2em; text-align:right; font-weight:800; font-variant-numeric:tabular-nums;}
+  .viaNote{padding:0 12px 8px; font-size:11.5px; color:var(--muted);}
   .navStepList{position:relative; padding-left:26px;}
   .navStep{position:relative; padding-bottom:26px;}
   .navStep:last-child{padding-bottom:0;}
@@ -635,6 +652,7 @@ const I18N = {
     boardAt:(name)=>`${name} から乗車`,
     departure:(t,m)=>`発車 ${t}（あと${fmtRemain(m,"ja")}）`,
     stopsAhead:(n)=>`${n}駅先で降車`,
+    viaStops:(n)=>`途中のバス停 ${n}か所`, viaFareNote:"運賃は乗車バス停からの金額", viaAlightTag:"降車",
     alightAt:(name)=>`${name} で降ります`,
     arriveAt:(name)=>`目的地「${name}」に到着`,
     noDirect:"直通の便が見つかりませんでした",
@@ -686,6 +704,7 @@ const I18N = {
     boardAt:(name)=>`Board at ${name}`,
     departure:(t,m)=>`Departs ${t} (in ${fmtRemain(m,"en")})`,
     stopsAhead:(n)=>`Get off ${n} stop(s) later`,
+    viaStops:(n)=>`${n} stop(s) in between`, viaFareNote:"Fares are from the boarding stop", viaAlightTag:"Exit",
     alightAt:(name)=>`Get off at ${name}`,
     arriveAt:(name)=>`Arrive at "${name}"`,
     noDirect:"No direct bus found",
@@ -737,6 +756,7 @@ const I18N = {
     boardAt:(name)=>`Montez à ${name}`,
     departure:(t,m)=>`Départ ${t} (dans ${fmtRemain(m,"fr")})`,
     stopsAhead:(n)=>`Descendez ${n} arrêt(s) plus loin`,
+    viaStops:(n)=>`${n} arrêt(s) intermédiaire(s)`, viaFareNote:"Tarifs depuis l'arrêt de montée", viaAlightTag:"Sortie",
     alightAt:(name)=>`Descendez à ${name}`,
     arriveAt:(name)=>`Arrivée à « ${name} »`,
     noDirect:"Aucun bus direct trouvé",
@@ -1939,8 +1959,19 @@ function openNavScreen(){
       ? t("departure", fmtClock(leg.boardTime), Math.max(0, Math.round(leg.boardTime - j.nowMin)))
       : t("departClock", fmtClock(leg.boardTime));
     const badge = `<div class="navBoardBadge" style="background:${color}22;color:${color};">${ico("arrowRight","icon icon-sm")} ${escapeHtml(leg.direction)}（${escapeHtml(leg.route)}）</div>`;
+    // 乗車区間の途中のバス停（乗車バス停からの運賃つき）
+    let viaHtml = "";
+    if (leg.pts.length > 2) {
+      const rows = leg.pts.slice(1).map((p, k, arr) => {
+        const fy = fareLookup(leg.route, leg.boardName, p.name);
+        const alight = k === arr.length - 1;
+        return `<div class="viaRow${alight ? " isAlight" : ""}"><span class="viaDot"></span><span class="viaName" data-tag="${t("viaAlightTag")}">${dn(p.name)}</span>${fy != null ? `<span class="viaFare">${fmtYen(fy)}${lang === "ja" ? "円" : ""}</span>` : ""}<span class="viaTime">${fmtClock(p.t)}</span></div>`;
+      }).join("");
+      const hasFare = leg.pts.slice(1).some(p => fareLookup(leg.route, leg.boardName, p.name) != null);
+      viaHtml = `<details class="viaBox" open style="--c:${color}"><summary>${t("viaStops", leg.pts.length - 2)}</summary><div class="viaList">${rows}</div>${hasFare ? `<div class="viaNote">${t("viaFareNote")}</div>` : ""}</details>`;
+    }
     html += step("", i === 0 ? t("stepBoard") : t("stepTransferBoard"), t("boardAt", dn(leg.boardName)),
-      [dep, leg.fare != null ? `<b>${t("fareLine", leg.fare)}</b>` : ""], badge);
+      [dep, leg.fare != null ? `<b>${t("fareLine", leg.fare)}</b>` : ""], badge + viaHtml);
 
     html += step("alight", isLast ? t("stepAlight") : t("stepAlightTransfer"), t("alightAt", dn(leg.alightName)),
       [`${t("stopsAhead", leg.stops)}・${t("arriveClock", fmtClock(leg.alightTime))}`]);
