@@ -97,14 +97,14 @@ if (typeof supabase === "undefined") document.write('<script src="https://unpkg.
   }
   .iconBtn:active{background:var(--soft);}
 
-  #suggestBox{
+  #suggestBox,#originSuggestBox{
     position:absolute; top:calc(100% + 8px); left:0; right:0;
     background:#fff; border-radius:12px; overflow:hidden;
     box-shadow:var(--shadow); border:1px solid var(--line);
     z-index:950; color:var(--ink);
     max-height:52vh; overflow-y:auto; display:none;
   }
-  #suggestBox.show{display:block;}
+  #suggestBox.show,#originSuggestBox.show{display:block;}
   .suggestItem{
     padding:12px 14px; border-bottom:1px solid var(--line);
     display:flex; align-items:center; gap:10px; cursor:pointer;
@@ -380,6 +380,34 @@ if (typeof supabase === "undefined") document.write('<script src="https://unpkg.
     font-size:12.5px; text-decoration:underline; cursor:pointer; padding:2px 4px;
   }
 
+
+  /* ===== 出発地入力 ===== */
+  #originRow{display:flex;gap:8px;position:relative;margin-bottom:8px;}
+  #originBox{
+    flex:1; padding:11px 14px; border-radius:11px;
+    border:1px solid var(--line); border-left:4px solid var(--nearest);
+    font-size:15px; outline:none; background:var(--bg); color:var(--ink);
+  }
+  #originBox::placeholder{color:#a8a9ae;}
+  #searchBox{border-left:4px solid var(--dest);}
+
+  /* ===== 乗り継ぎ経路 ===== */
+  .goHereBtn.secondary{background:var(--surface); color:var(--ink); border:1px solid var(--ink); margin-top:8px;}
+  .journeySummary{
+    display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px;
+    padding:12px 14px; margin-bottom:18px; border-radius:12px;
+    background:var(--soft); font-size:13.5px; font-weight:700;
+  }
+  .journeySummary .chip{background:var(--ink); color:#fff; border-radius:999px; padding:3px 10px; font-size:12.5px;}
+  .journeySummary .chip.direct{background:var(--dest);}
+  .journeyNote{
+    margin:-6px 0 16px; padding:9px 12px; border-radius:10px;
+    background:rgba(226,121,42,.14); color:var(--ink); font-size:12.5px; font-weight:700;
+  }
+  .navStep.transfer::before{background:#e2792a;}
+  .navStep.transfer .stepMain{font-size:15px;}
+  .navStep.alight::before{background:#fff; border-color:var(--ink);}
+
   .toast{
     position:fixed; left:50%; bottom:calc(var(--nav-h) + 18px); transform:translateX(-50%);
     background:rgba(20,20,20,0.92); color:#fff; padding:10px 18px; border-radius:20px;
@@ -401,6 +429,11 @@ if (typeof supabase === "undefined") document.write('<script src="https://unpkg.
       <div class="spacer"></div>
       <button id="langToggle"><span id="ICO_globe"></span><span id="langToggleLabel">EN</span></button>
     </div>
+    <div id="originRow">
+      <input id="originBox" type="text" placeholder="出発地（空欄＝現在地）" autocomplete="off" data-i18n-ph="originPlaceholder" />
+      <button class="iconBtn" id="originResetBtn" title="現在地を出発地にする"></button>
+      <div id="originSuggestBox"></div>
+    </div>
     <div id="searchRow">
       <input id="searchBox" type="text" placeholder="行き先を入力（例：役場、駅、道の駅）" autocomplete="off" data-i18n-ph="searchPlaceholder" />
       <button class="iconBtn" id="clearSearchBtn" title="クリア"></button>
@@ -417,7 +450,7 @@ if (typeof supabase === "undefined") document.write('<script src="https://unpkg.
     <div id="nearestCard" style="display:none;">
       <div class="pin"><span id="ICO_pin1"></span><div class="dot"></div></div>
       <div class="body">
-        <div class="label" data-i18n="nearestLabel">最寄りバス停</div>
+        <div class="label" id="nearestLabelEl" data-i18n="nearestLabel">最寄りバス停</div>
         <div class="stopName" id="nearestName">-</div>
         <div class="walk" id="nearestWalk">-</div>
       </div>
@@ -554,6 +587,7 @@ function mountIcons(){
   document.getElementById("ICO_bus").innerHTML = ico("bus","icon icon-sm");
   document.getElementById("ICO_globe").innerHTML = ICONS.globe;
   document.getElementById("clearSearchBtn").innerHTML = ICONS.x;
+  document.getElementById("originResetBtn").innerHTML = ico("crosshair","icon icon-sm");
   document.getElementById("locateBtn").innerHTML = ico("crosshair","icon icon-lg");
   document.getElementById("ICO_pin1").innerHTML = ICONS.pin;
   document.getElementById("ICO_chev1").innerHTML = ICONS.chevron;
@@ -614,7 +648,22 @@ const I18N = {
     walkPrefix:"現在地から", langSwitchToast:"表示言語を日本語にしました",
     nextStopLabel:"次のバス停", nextNextLabel:"その次", terminusHere:"この便はここが終点です",
     showRestBtn:(n)=>`この先 ${n} 件を終点まで表示`, hideRestBtn:"閉じる", termTag:"終点",
-    filterNote:(d)=>`「${d}」へ行く路線のみ表示中`, showAllRoutes:"すべての路線を表示", showDestRoutes:"目的地の路線のみ"
+    filterNote:(d)=>`「${d}」へ行く路線のみ表示中`, showAllRoutes:"すべての路線を表示", showDestRoutes:"目的地の路線のみ",
+    originPlaceholder:"出発地（空欄＝現在地）", originLabel:"出発地のバス停", originResetTitle:"現在地を出発地にする",
+    setOriginBtn:"この停留所を出発地にする",
+    toastOriginSet:(n)=>`出発地を「${n}」に設定しました`, toastOriginReset:"出発地を現在地に戻しました",
+    stepStart:"出発", stepTransfer:"乗換", stepTransferBoard:"乗換・乗車", stepAlightTransfer:"降車（乗換）",
+    startFromStop:(n)=>`${n} から出発`,
+    walkTransfer:(a,b,d,m)=>`${a} → ${b} へ徒歩（${d}・${m}）`,
+    transferAt:(n)=>`${n} で乗り換え`,
+    waitMin:(m)=>`待ち時間 ${fmtRemain(m,"ja")}`,
+    arriveClock:(tm)=>`${tm} 着`, departClock:(tm)=>`${tm} 発`,
+    transferCount:(n)=> n===0 ? "直通" : `乗換${n}回`,
+    rideSpan:(dep,arr,m)=>`${dep} 発 → ${arr} 着（約${fmtRemain(m,"ja")}）`,
+    fareTotal:(y)=>`運賃合計 ${fmtYen(y)}円`, fareTotalPartial:(y)=>`運賃合計 ${fmtYen(y)}円＋（運賃不明の区間あり）`,
+    tomorrowNote:"本日の運行は終了しています。明日の始発からの経路を表示しています。",
+    noRoute:"経路が見つかりませんでした", noRouteSub:"乗り換えを含めても、この出発地から目的地まで行ける便が見つかりません。現地バス停の時刻表もご確認ください。",
+    arriveShort:(tm)=>`${tm}着`, journeyRideTo:(n)=>`${n}行き`
   },
   en: {
     brand:"Bus Navi", place:"Tsuwano",
@@ -650,7 +699,22 @@ const I18N = {
     walkPrefix:"From your location:", langSwitchToast:"Display language set to English",
     nextStopLabel:"Next stop", nextNextLabel:"Then", terminusHere:"This trip ends at this stop",
     showRestBtn:(n)=>`Show ${n} more stops to the terminus`, hideRestBtn:"Hide", termTag:"End",
-    filterNote:(d)=>`Showing only routes to ${d}`, showAllRoutes:"Show all routes", showDestRoutes:"Routes to destination only"
+    filterNote:(d)=>`Showing only routes to ${d}`, showAllRoutes:"Show all routes", showDestRoutes:"Routes to destination only",
+    originPlaceholder:"Origin (blank = current location)", originLabel:"Origin stop", originResetTitle:"Use current location as origin",
+    setOriginBtn:"Set this stop as origin",
+    toastOriginSet:(n)=>`Origin set to "${n}"`, toastOriginReset:"Origin reset to current location",
+    stepStart:"Start", stepTransfer:"Transfer", stepTransferBoard:"Transfer & board", stepAlightTransfer:"Get off (transfer)",
+    startFromStop:(n)=>`Start from ${n}`,
+    walkTransfer:(a,b,d,m)=>`Walk ${a} → ${b} (${d}, ${m})`,
+    transferAt:(n)=>`Transfer at ${n}`,
+    waitMin:(m)=>`Wait ${fmtRemain(m,"en")}`,
+    arriveClock:(tm)=>`Arr. ${tm}`, departClock:(tm)=>`Dep. ${tm}`,
+    transferCount:(n)=> n===0 ? "Direct" : `${n} transfer${n>1?"s":""}`,
+    rideSpan:(dep,arr,m)=>`${dep} → ${arr} (about ${fmtRemain(m,"en")})`,
+    fareTotal:(y)=>`Total fare ¥${fmtYen(y)}`, fareTotalPartial:(y)=>`Total fare ¥${fmtYen(y)}+ (some fares unknown)`,
+    tomorrowNote:"Service has ended for today. Showing the route from tomorrow's first bus.",
+    noRoute:"No route found", noRouteSub:"Even with transfers, no bus connection was found from this origin to the destination. Please also check the timetable at the stop.",
+    arriveShort:(tm)=>`Arr. ${tm}`, journeyRideTo:(n)=>`for ${n}`
   },
   fr: {
     brand:"Bus Navi", place:"Tsuwano",
@@ -686,7 +750,22 @@ const I18N = {
     walkPrefix:"Depuis votre position :", langSwitchToast:"Langue d'affichage : français",
     nextStopLabel:"Arrêt suivant", nextNextLabel:"Ensuite", terminusHere:"Ce trajet se termine à cet arrêt",
     showRestBtn:(n)=>`Afficher les ${n} arrêts suivants jusqu'au terminus`, hideRestBtn:"Masquer", termTag:"Terminus",
-    filterNote:(d)=>`Seules les lignes vers « ${d} » sont affichées`, showAllRoutes:"Afficher toutes les lignes", showDestRoutes:"Lignes vers la destination uniquement"
+    filterNote:(d)=>`Seules les lignes vers « ${d} » sont affichées`, showAllRoutes:"Afficher toutes les lignes", showDestRoutes:"Lignes vers la destination uniquement",
+    originPlaceholder:"Départ (vide = position actuelle)", originLabel:"Arrêt de départ", originResetTitle:"Utiliser la position actuelle comme départ",
+    setOriginBtn:"Définir cet arrêt comme départ",
+    toastOriginSet:(n)=>`Départ défini : « ${n} »`, toastOriginReset:"Départ remis sur la position actuelle",
+    stepStart:"Départ", stepTransfer:"Correspondance", stepTransferBoard:"Correspondance et montée", stepAlightTransfer:"Descente (correspondance)",
+    startFromStop:(n)=>`Départ de ${n}`,
+    walkTransfer:(a,b,d,m)=>`À pied ${a} → ${b} (${d}, ${m})`,
+    transferAt:(n)=>`Correspondance à ${n}`,
+    waitMin:(m)=>`Attente ${fmtRemain(m,"fr")}`,
+    arriveClock:(tm)=>`Arr. ${tm}`, departClock:(tm)=>`Dép. ${tm}`,
+    transferCount:(n)=> n===0 ? "Direct" : `${n} correspondance${n>1?"s":""}`,
+    rideSpan:(dep,arr,m)=>`${dep} → ${arr} (env. ${fmtRemain(m,"fr")})`,
+    fareTotal:(y)=>`Tarif total ${fmtYen(y)} ¥`, fareTotalPartial:(y)=>`Tarif total ${fmtYen(y)} ¥+ (certains tarifs inconnus)`,
+    tomorrowNote:"Le service est terminé pour aujourd'hui. Itinéraire à partir du premier bus de demain.",
+    noRoute:"Aucun itinéraire trouvé", noRouteSub:"Même avec correspondances, aucun bus ne relie ce départ à la destination. Consultez aussi l'horaire affiché à l'arrêt.",
+    arriveShort:(tm)=>`Arr. ${tm}`, journeyRideTo:(n)=>`vers ${n}`
   }
 };
 let lang = "ja";
@@ -702,7 +781,7 @@ function applyLanguage(){
   renderShortcuts();
   updateStopLabels();
   if (nearestStop) refreshNearestCardText();
-  if (destinationStop) document.getElementById("navCtaText").textContent = displayStopName(destinationStop.stop_name);
+  updateNavCta();
   closeAllSheets();
 }
 document.getElementById("langToggle").addEventListener("click", () => {
@@ -758,6 +837,15 @@ let lastWalkMeters = 0;
 let stopLabelLayer = null;          // バス停名ラベル用レイヤー
 let highlightMap = new Map();       // stopKey -> { rank, color }（ポップアップ表示中の「次／その次」）
 const LABEL_MIN_ZOOM = 13;          // このズーム未満では通常ラベルを非表示
+
+// ---- 乗り継ぎ経路 ----
+let originStop = null;               // 出発地として選んだバス停（null＝現在地）
+let journey = null;                  // 探索結果（乗り継ぎ経路）
+let journeyLayer = null;             // 経路の線を描くレイヤー
+let journeyStopMap = new Map();      // stopKey -> { rank, color }（経路上のバス停）
+let stopByKey = new Map();
+let transitTrips = [];
+let stopNeighbors = new Map();
 
 //=====================================================
 // ユーティリティ
@@ -883,6 +971,7 @@ map.createPane("stopLabels");
 map.getPane("stopLabels").style.zIndex = 610;
 map.getPane("stopLabels").style.pointerEvents = "none";
 stopLabelLayer = L.layerGroup().addTo(map);
+journeyLayer = L.layerGroup().addTo(map);
 map.on("moveend resize", () => updateStopLabels());
 
 //=====================================================
@@ -920,6 +1009,8 @@ async function loadStops(){
     tripDestinationMap.set(key, active[active.length - 1].stop_name);
   });
 
+  stopByKey = new Map(stopsList.map(s => [s.key, s]));
+  buildTransit();
   renderShortcuts();
   renderAllMarkers();
 }
@@ -932,6 +1023,8 @@ function renderAllMarkers(){
   stopMarkers = [];
   stopsList.forEach(stop => {
     let color = "#2f6fed";
+    const jh = journeyStopMap.get(stop.key);
+    if (jh) color = jh.color;
     if (nearestStop && stop.key === nearestStop.key) color = "#e3383f";
     if (destinationStop && stop.key === destinationStop.key) color = "#1fa463";
     const marker = L.marker([stop.lat, stop.lng], { icon: pinIcon(color) }).addTo(map);
@@ -975,7 +1068,7 @@ function updateStopLabels(){
   // 優先度：次/その次 > 目的地 > 最寄り > 乗り入れ路線が多い停留所
   const candidates = [];
   stopsList.forEach(stop => {
-    const hl = highlightMap.get(stop.key);
+    const hl = highlightMap.get(stop.key) || journeyStopMap.get(stop.key);
     const isDest = !!(destinationStop && stop.key === destinationStop.key);
     const isNearest = !!(nearestStop && stop.key === nearestStop.key);
     if (!showAll && !hl && !isDest && !isNearest) return;
@@ -1022,7 +1115,11 @@ function updateStopLabels(){
 
 function refreshNearestCardText(){
   if (!nearestStop) return;
+  const labelEl = document.getElementById("nearestLabelEl");
+  labelEl.dataset.i18n = originStop ? "originLabel" : "nearestLabel";
+  labelEl.textContent = t(labelEl.dataset.i18n);
   document.getElementById("nearestName").textContent = displayStopName(nearestStop.stop_name);
+  if (originStop) { document.getElementById("nearestWalk").textContent = ""; return; }
   const w = walkInfo(lastWalkMeters);
   document.getElementById("nearestWalk").textContent = `${w.distText}・${w.timeText}`;
 }
@@ -1030,6 +1127,13 @@ function refreshNearestCardText(){
 // 自分に一番近いバス停を求める。行先が設定されている場合は「行先まで行ける便がある」バス停の中から選ぶ
 // (該当がなければ従来どおり単純に一番近いバス停)
 function updateNearestStop(){
+  if (originStop) {            // 出発地を指定している場合は、そのバス停が起点
+    nearestStop = originStop;
+    lastWalkMeters = 0;
+    refreshNearestCardText();
+    document.getElementById("nearestCard").style.display = destinationStop ? "none" : "flex";
+    return;
+  }
   if (!myPos) return;
   const pick = (needReach) => {
     let best = null, bestDist = Infinity;
@@ -1053,9 +1157,17 @@ function updateNearestStop(){
   }
 }
 
-// 最寄り(赤)のバス停にフォーカス。現在地があれば現在地と一緒に収める
+// 最寄り(赤)のバス停にフォーカス。経路があれば経路全体が収まるように表示する
 function focusNearestStop(){
+  if (journey) {
+    const pts = [];
+    const op = originPos();
+    if (op) pts.push([op.lat, op.lng]);
+    journey.legs.forEach(l => l.pts.forEach(p => pts.push([p.lat, p.lng])));
+    if (pts.length) { map.fitBounds(pts, { padding:[70,70], maxZoom:16 }); return; }
+  }
   if (!nearestStop) return;
+  if (originStop) { map.setView([nearestStop.lat, nearestStop.lng], 16); return; }
   if (myPos) map.fitBounds([[myPos.lat,myPos.lng],[nearestStop.lat,nearestStop.lng]], { padding:[80,80], maxZoom:17 });
   else map.setView([nearestStop.lat, nearestStop.lng], 16);
 }
@@ -1065,16 +1177,15 @@ function refreshCurrentAndNearest(){
   if (currentMarker) map.removeLayer(currentMarker);
   currentMarker = L.marker([myPos.lat, myPos.lng], { icon: meIcon() }).addTo(map);
 
-  updateNearestStop();
-
-  renderAllMarkers();
-  drawRouteLineIfNeeded();
+  recomputeJourney();
 }
 
 function drawRouteLineIfNeeded(){
   if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
-  if (myPos && destinationStop) {
-    routeLine = L.polyline([[myPos.lat, myPos.lng], [destinationStop.lat, destinationStop.lng]],
+  if (journey) return;        // 経路が見つかっているときは経路そのものを描画する
+  const op = originPos();
+  if (op && destinationStop) {
+    routeLine = L.polyline([[op.lat, op.lng], [destinationStop.lat, destinationStop.lng]],
       { color:"#1fa463", weight:3, dashArray:"5,7", opacity:0.85 }).addTo(map);
   }
 }
@@ -1257,7 +1368,8 @@ function openDetail(stopKey, keepState){
 
   extraHl.forEach(e => { if (!hlMap.has(e.k) || hlMap.get(e.k).rank > e.rank) hlMap.set(e.k, { rank: e.rank, color: e.color }); });
 
-  const goBtn = `<button class="goHereBtn" id="goHereBtn">${t("goHereBtn")}</button>`;
+  const goBtn = `<button class="goHereBtn" id="goHereBtn">${t("goHereBtn")}</button>`
+    + `<button class="goHereBtn secondary" id="setOriginBtn">${t("setOriginBtn")}</button>`;
   document.getElementById("detailBody").innerHTML = metaHtml + filterNoteHtml + cardsHtml + goBtn;
   document.querySelectorAll("#detailBody .nsMoreBtn").forEach(btn => {
     btn.onclick = () => {
@@ -1271,6 +1383,7 @@ function openDetail(stopKey, keepState){
   const rfBtn = document.getElementById("routeFilterToggle");
   if (rfBtn) rfBtn.onclick = () => { detailShowAllRoutes = !detailShowAllRoutes; detailExpanded = new Set(); openDetail(stopKey, true); };
   document.getElementById("goHereBtn").onclick = () => { setDestination(stop); addHistory(stop.stop_name); closeAllSheets(); openNavScreen(); };
+  document.getElementById("setOriginBtn").onclick = () => { setOrigin(stop); closeAllSheets(); if (destinationStop) openNavScreen(); };
 
   openSheet("detailSheet");
   drawStopRoutes({ routes });
@@ -1405,23 +1518,69 @@ function setDestination(stop){
   document.getElementById("navCtaText").textContent = displayStopName(stop.stop_name);
   document.getElementById("navCta").classList.add("show");
   document.getElementById("nearestCard").style.display = "none";
-  updateNearestStop();
-  renderAllMarkers();
-  drawRouteLineIfNeeded();
+  recomputeJourney();
   focusNearestStop();
 }
 
 function clearDestination(){
   destinationStop = null;
-  updateNearestStop();
-  renderAllMarkers();
-  drawRouteLineIfNeeded();
+  recomputeJourney();
   document.getElementById("navCta").classList.remove("show");
   if (nearestStop) document.getElementById("nearestCard").style.display = "flex";
 }
 
 document.getElementById("searchBox").addEventListener("input", e => runTopSearch(e.target.value.trim()));
 document.getElementById("searchBox2").addEventListener("input", e => runSheetSearch(e.target.value.trim()));
+
+//=====================================================
+// 出発地の入力
+//=====================================================
+function runOriginSearch(keyword){
+  const box = document.getElementById("originSuggestBox");
+  if (!keyword) { box.classList.remove("show"); return; }
+  document.getElementById("suggestBox").classList.remove("show");
+  const results = searchStops(keyword);
+  if (results.length === 0) {
+    box.innerHTML = `<div class="suggestEmpty">${t("emptySearch", escapeHtml(keyword))}</div>`;
+  } else {
+    box.innerHTML = results.map(s => `
+      <div class="suggestItem" data-key="${s.key}">
+        ${ico("pin","icon icon-sm")}
+        <div><div class="name">${displayStopName(s.stop_name)}</div><div class="sub">${s.routes.map(r=>r.route).slice(0,2).join(" / ")}</div></div>
+      </div>`).join("");
+    box.querySelectorAll(".suggestItem").forEach(el => {
+      el.onclick = () => {
+        const stop = stopsList.find(s => s.key === el.dataset.key);
+        box.classList.remove("show");
+        if (stop) { setOrigin(stop); showToast(t("toastOriginSet", displayStopName(stop.stop_name))); }
+      };
+    });
+  }
+  box.classList.add("show");
+}
+function setOrigin(stop){
+  originStop = stop;
+  document.getElementById("originBox").value = stop.stop_name;
+  recomputeJourney();
+  focusNearestStop();
+}
+function resetOrigin(){
+  const had = !!originStop;
+  originStop = null;
+  document.getElementById("originBox").value = "";
+  document.getElementById("originSuggestBox").classList.remove("show");
+  recomputeJourney();
+  focusNearestStop();
+  if (had) showToast(t("toastOriginReset"));
+}
+document.getElementById("originBox").addEventListener("input", e => {
+  const v = e.target.value.trim();
+  if (!v && originStop) { resetOrigin(); return; }
+  runOriginSearch(v);
+});
+document.getElementById("originResetBtn").onclick = resetOrigin;
+document.getElementById("searchBox").addEventListener("focus", () => document.getElementById("originSuggestBox").classList.remove("show"));
+
 document.getElementById("clearSearchBtn").onclick = () => { document.getElementById("searchBox").value = ""; document.getElementById("suggestBox").classList.remove("show"); clearDestination(); };
 document.getElementById("navCtaClear").onclick = (e) => { e.stopPropagation(); clearDestination(); };
 document.getElementById("navCta").addEventListener("click", (e) => { if (e.target.closest("#navCtaClear")) return; openNavScreen(); });
@@ -1456,81 +1615,345 @@ function renderHistory(){
 //=====================================================
 // ナビ画面
 //=====================================================
-function findBestTrip(fromStopName, toStopName){
-  let best = null;
-  tripMap.forEach((points, key) => {
-    const active = points.filter(p => p.active);
-    const fromIdx = active.findIndex(p => p.stop_name === fromStopName);
-    const toIdx = active.findIndex(p => p.stop_name === toStopName);
-    if (fromIdx === -1 || toIdx === -1 || fromIdx >= toIdx) return;
+//=====================================================
+// 乗り継ぎ経路探索（時刻表ベース）
+//   ・出発地：現在地（付近のバス停を複数候補にする）／入力したバス停
+//   ・最大 MAX_LEGS 本のバスを乗り継ぎ、徒歩での乗り換え（近接バス停）にも対応
+//   ・到着時刻が最も早い経路を基本に、乗換1回につき TRANSFER_PENALTY_MIN 分の不利を付けて比較
+//=====================================================
+//<<TRANSIT-START
+const MAX_LEGS = 4;                 // 乗るバスの最大本数（乗換3回まで）
+const TRANSFER_BUF_MIN = 2;         // 降車後、次のバスに乗るまでに最低限必要な分数
+const TRANSFER_PENALTY_MIN = 15;    // 乗換1回あたりの比較用ペナルティ（分）
+const TRANSFER_WALK_MAX_M = 250;    // 徒歩乗換を許す距離（別名のバス停同士）
+const SAME_NAME_WALK_MAX_M = 600;   // 徒歩乗換を許す距離（同名バス停＝道路の反対側など）
+const START_WALK_MAX_M = 1500;      // 現在地から歩いて乗りに行くバス停の探索半径（上限）
+const START_WALK_EXTRA_M = 500;     // 最寄りバス停よりどれだけ遠いバス停まで候補にするか
+const WALK_WEIGHT = 0.5;            // 比較時、出発時の徒歩1分を追加で何分ぶん不利にするか
 
-    const boardPoint = points.find(p => p.stop_name === fromStopName);
-    const diff = minutesUntil(boardPoint.time);
-    if (diff === null || diff <= 0) return;
-
-    const [route, direction] = key.split("|");
-    const candidate = { route, direction, boardTime: boardPoint.time, minUntil: Math.round(diff), stopsBetween: toIdx - fromIdx, alightStop: toStopName, fare: fareLookup(route, fromStopName, toStopName), destination: tripDestinationMap.get(key) || toStopName };
-    if (!best || candidate.minUntil < best.minUntil) best = candidate;
-  });
-  return best;
+function parseMinutes(str){
+  const p = String(str == null ? "" : str).split(":");
+  if (p.length < 2) return null;
+  const h = Number(p[0]), m = Number(p[1]);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+function fmtClock(min){
+  const x = ((Math.round(min) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`;
 }
 
+// tripMap から探索用の便データと、徒歩乗換の候補（近接バス停）を作る
+function buildTransit(){
+  transitTrips = [];
+  tripMap.forEach((points, key) => {
+    const pts = [];
+    let prev = -1;
+    points.forEach(p => {
+      if (!p.active) return;
+      let tm = parseMinutes(p.time);
+      if (tm === null) return;
+      if (tm < prev) tm = (prev - tm > 600) ? tm + 1440 : prev;   // 日またぎ補正／軽微な逆転は据え置き
+      prev = tm;
+      pts.push({ key: `${p.stop_name}|${p.lat}|${p.lng}`, name: p.stop_name, lat: p.lat, lng: p.lng, t: tm });
+    });
+    if (pts.length < 2) return;
+    const parts = key.split("|");
+    transitTrips.push({ key, route: parts[0], direction: parts[1], pts });
+  });
+
+  stopNeighbors = new Map();
+  stopsList.forEach(s => stopNeighbors.set(s.key, []));
+  for (let i = 0; i < stopsList.length; i++) {
+    for (let j = i + 1; j < stopsList.length; j++) {
+      const a = stopsList[i], b = stopsList[j];
+      if (Math.abs(a.lat - b.lat) > 0.006 || Math.abs(a.lng - b.lng) > 0.008) continue;
+      const d = distance(a.lat, a.lng, b.lat, b.lng);
+      const lim = a.stop_name === b.stop_name ? SAME_NAME_WALK_MAX_M : TRANSFER_WALK_MAX_M;
+      if (d > lim) continue;
+      const mn = Math.max(1, Math.ceil(d / WALK_M_PER_MIN));
+      stopNeighbors.get(a.key).push({ key: b.key, d, min: mn });
+      stopNeighbors.get(b.key).push({ key: a.key, d, min: mn });
+    }
+  }
+}
+
+// 出発地の座標（出発地バス停を指定していればそのバス停、なければ現在地）
+function originPos(){
+  if (originStop) return { lat: originStop.lat, lng: originStop.lng };
+  return myPos;
+}
+
+function planJourney(){
+  if (!destinationStop || !transitTrips.length) return null;
+  if (!originStop && !myPos) return null;
+  if (originStop && originStop.stop_name === destinationStop.stop_name) return null;
+  const destKeys = new Set(stopsList.filter(s => s.stop_name === destinationStop.stop_name).map(s => s.key));
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+  let r = searchJourney(nowMin, destKeys);
+  if (r) { r.tomorrow = false; r.nowMin = nowMin; return r; }
+  r = searchJourney(0, destKeys);            // 本日の便で行けない場合は、明日の始発から探す
+  if (r) { r.tomorrow = true; r.nowMin = 0; }
+  return r;
+}
+
+// ラウンドベースの最早到着探索（RAPTOR方式）。k 回目のラウンド＝k 本目のバスまで使う
+function searchJourney(startMin, destKeys){
+  // --- 出発候補のバス停 ---
+  const starts = [];
+  if (originStop) {
+    stopsList.filter(s => s.stop_name === originStop.stop_name)
+      .forEach(s => starts.push({ stop: s, walkM: 0, walkMin: 0 }));
+  } else {
+    const arr = stopsList.map(s => ({ stop: s, walkM: distance(myPos.lat, myPos.lng, s.lat, s.lng) }))
+      .sort((a, b) => a.walkM - b.walkM);
+    // 最寄りのバス停＋500m以内（上限 START_WALK_MAX_M）を乗車候補にする。遠くまで歩く経路を避ける
+    const nearestM = arr.length ? arr[0].walkM : 0;
+    const lim = Math.max(nearestM, Math.min(START_WALK_MAX_M, nearestM + START_WALK_EXTRA_M));   // 最寄りは必ず含める
+    const pick = arr.filter(x => x.walkM <= lim).slice(0, 12);
+    pick.forEach(x => starts.push({ stop: x.stop, walkM: x.walkM, walkMin: Math.ceil(x.walkM / WALK_M_PER_MIN) }));
+  }
+  let cum = new Map();
+  starts.forEach(x => cum.set(x.stop.key, { kind: "start", key: x.stop.key, t: startMin + x.walkMin, walkM: x.walkM, walkMin: x.walkMin }));
+
+  const results = [];
+  let lastLbl = null;
+  for (let k = 1; k <= MAX_LEGS; k++) {
+    const cur = new Map(cum);
+    const improved = [];
+    transitTrips.forEach(trip => {
+      let boarded = false, bPos = -1, bLabel = null;
+      for (let pos = 0; pos < trip.pts.length; pos++) {
+        const p = trip.pts[pos];
+        if (boarded) {
+          const ex = cur.get(p.key);
+          if (!ex || p.t < ex.t) {
+            const lbl = { kind: "ride", key: p.key, t: p.t, trip, boardPos: bPos, alightPos: pos, from: bLabel };
+            cur.set(p.key, lbl);
+            improved.push(lbl);
+          }
+        } else {
+          const pl = cum.get(p.key);
+          if (pl) {
+            const buf = pl.kind === "ride" ? TRANSFER_BUF_MIN : 0;
+            if (pl.t + buf <= p.t) { boarded = true; bPos = pos; bLabel = pl; }
+          }
+        }
+      }
+    });
+    // 降車したバス停から徒歩で乗り換えられるバス停
+    improved.forEach(lbl => {
+      if (cur.get(lbl.key) !== lbl) return;
+      (stopNeighbors.get(lbl.key) || []).forEach(nb => {
+        const tt = lbl.t + nb.min;
+        const ex = cur.get(nb.key);
+        if (!ex || tt < ex.t) cur.set(nb.key, { kind: "walk", key: nb.key, t: tt, from: lbl, walkM: nb.d, walkMin: nb.min });
+      });
+    });
+    // 目的地に到着している最良ラベル（バス降車のみ）
+    let bestLbl = null;
+    destKeys.forEach(key => {
+      const l = cur.get(key);
+      if (l && l.kind === "ride" && (!bestLbl || l.t < bestLbl.t)) bestLbl = l;
+    });
+    if (bestLbl && bestLbl !== lastLbl) { results.push({ k, lbl: bestLbl }); lastLbl = bestLbl; }
+    cum = cur;
+  }
+  if (!results.length) return null;
+
+  // 到着時刻 ＋ 乗換ペナルティ ＋ 出発時の徒歩ペナルティ が最小のものを採用（同点なら乗換の少ない方）
+  const cands = results.map(r => ({ k: r.k, j: buildJourney(r.lbl) })).filter(x => x.j);
+  if (!cands.length) return null;
+  const score = x => x.j.arrival + (x.k - 1) * TRANSFER_PENALTY_MIN + x.j.startWalkMin * WALK_WEIGHT;
+  cands.sort((a, b) => score(a) - score(b) || a.k - b.k);
+  return cands[0].j;
+}
+
+// ラベルのつながりを逆にたどって、区間(leg)のリストにする
+function buildJourney(finalLbl){
+  const legs = [];
+  let node = finalLbl;
+  while (node && node.kind === "ride") {
+    const trip = node.trip;
+    const bp = trip.pts[node.boardPos], ap = trip.pts[node.alightPos];
+    const leg = {
+      route: trip.route, direction: trip.direction,
+      terminus: tripDestinationMap.get(trip.key) || trip.pts[trip.pts.length - 1].name,
+      boardKey: bp.key, boardName: bp.name, boardTime: bp.t,
+      alightKey: ap.key, alightName: ap.name, alightTime: ap.t,
+      stops: node.alightPos - node.boardPos,
+      pts: trip.pts.slice(node.boardPos, node.alightPos + 1),
+      fare: fareLookup(trip.route, bp.name, ap.name),
+      walkBefore: null, waitMin: 0
+    };
+    let prev = node.from;
+    if (prev.kind === "walk") {
+      leg.walkBefore = { fromKey: prev.from.key, distM: prev.walkM, min: prev.walkMin };
+      prev = prev.from;
+    }
+    legs.unshift(leg);
+    node = prev;
+  }
+  if (!legs.length || !node || node.kind !== "start") return null;
+  const startLbl = node;
+  for (let i = 1; i < legs.length; i++) {
+    const arr = legs[i - 1].alightTime + (legs[i].walkBefore ? legs[i].walkBefore.min : 0);
+    legs[i].waitMin = Math.max(0, Math.round(legs[i].boardTime - arr));
+  }
+  let fareTotal = 0, fareUnknown = 0;
+  legs.forEach(l => { if (l.fare == null) fareUnknown++; else fareTotal += l.fare; });
+  return {
+    legs,
+    boardStop: stopByKey.get(legs[0].boardKey) || null,
+    startWalkM: startLbl.walkM, startWalkMin: startLbl.walkMin,
+    arrival: legs[legs.length - 1].alightTime,
+    transfers: legs.length - 1,
+    fareTotal, fareUnknown
+  };
+}
+//<<TRANSIT-END
+
+//=====================================================
+// 経路の描画／再計算
+//=====================================================
+const WALK_LINE_STYLE = { color:"#555", weight:3, dashArray:"2,8", opacity:0.9 };
+const ROLE_COLOR = { board:"#e3383f", transfer:"#e2792a", arrive:"#1fa463" };
+
+function drawJourney(){
+  if (journeyLayer) journeyLayer.clearLayers();
+  journeyStopMap = new Map();
+  if (!journey || !journeyLayer) return;
+
+  const op = originPos();
+  const firstPt = journey.legs[0].pts[0];
+  if (op && journey.startWalkM > 0) {
+    L.polyline([[op.lat, op.lng], [firstPt.lat, firstPt.lng]], WALK_LINE_STYLE).addTo(journeyLayer);
+  }
+  journey.legs.forEach(leg => {
+    const latlngs = leg.pts.map(p => [p.lat, p.lng]);
+    L.polyline(latlngs, { color:"#ffffff", weight:10, opacity:0.85, lineJoin:"round", lineCap:"round" }).addTo(journeyLayer);
+    L.polyline(latlngs, { color: colorForRoute(leg.route), weight:6, opacity:0.95, lineJoin:"round", lineCap:"round" }).addTo(journeyLayer);
+    if (leg.walkBefore) {
+      const a = stopByKey.get(leg.walkBefore.fromKey);
+      if (a) L.polyline([[a.lat, a.lng], [leg.pts[0].lat, leg.pts[0].lng]], WALK_LINE_STYLE).addTo(journeyLayer);
+    }
+  });
+
+  // 経路上のバス停に 1,2,3… の番号と役割色（赤＝乗車／橙＝乗換／緑＝到着）を付ける
+  let rank = 1;
+  const add = (key, color) => { if (!journeyStopMap.has(key)) journeyStopMap.set(key, { rank: rank++, color }); };
+  journey.legs.forEach((leg, i) => {
+    add(leg.boardKey, i === 0 ? ROLE_COLOR.board : ROLE_COLOR.transfer);
+    add(leg.alightKey, i === journey.legs.length - 1 ? ROLE_COLOR.arrive : ROLE_COLOR.transfer);
+  });
+}
+
+function recomputeJourney(){
+  journey = (destinationStop && (originStop || myPos)) ? planJourney() : null;
+  if (journey && journey.boardStop) {
+    nearestStop = journey.boardStop;
+    lastWalkMeters = journey.startWalkM;
+    refreshNearestCardText();
+    document.getElementById("nearestCard").style.display = "none";
+  } else {
+    updateNearestStop();
+  }
+  drawJourney();
+  renderAllMarkers();
+  drawRouteLineIfNeeded();
+  updateNavCta();
+}
+
+function updateNavCta(){
+  if (!destinationStop) return;
+  let txt = displayStopName(destinationStop.stop_name);
+  if (journey) txt += `（${t("transferCount", journey.transfers)}・${t("arriveShort", fmtClock(journey.arrival))}）`;
+  document.getElementById("navCtaText").textContent = txt;
+}
+
+//=====================================================
+// ナビ画面
+//=====================================================
 function openNavScreen(){
   const body = document.getElementById("navBody");
 
   if (!destinationStop) { body.innerHTML = `<div class="navEmpty"><div class="bigIcon">${ico("compass","icon icon-lg")}</div>${t("navEmptyDest")}</div>`; openSheet("navScreen", true); return; }
-  if (!nearestStop) { body.innerHTML = `<div class="navEmpty"><div class="bigIcon">${ico("pin","icon icon-lg")}</div>${t("navEmptyGps")}<br>${t("navEmptyGpsSub")}</div>`; openSheet("navScreen", true); return; }
-
-  const walkD = myPos ? distance(myPos.lat, myPos.lng, nearestStop.lat, nearestStop.lng) : 0;
-  const w = walkInfo(walkD);
-  const trip = findBestTrip(nearestStop.stop_name, destinationStop.stop_name);
-
-  let html = `<div class="navStepList">`;
-
-  html += `
-    <div class="navStep">
-      <div class="stepLabel">${t("stepCurrent")}</div>
-      <div class="stepMain">${t("nearYou", displayStopName(nearestStop.stop_name))}</div>
-      <div class="stepSub">${myPos ? `${w.distText}・${w.timeText}` : ""}</div>
-      ${myPos ? `<button class="googleNavBtn" id="googleWalkBtn">${ico("walk")}${t("googleWalkBtn")}</button>` : ""}
-    </div>`;
-
-  if (trip) {
-    const color = colorForRoute(trip.route);
-    html += `
-      <div class="navStep">
-        <div class="stepLabel">${t("stepBoard")}</div>
-        <div class="stepMain">${t("boardAt", displayStopName(nearestStop.stop_name))}</div>
-        <div class="navBoardBadge" style="background:${color}22;color:${color};">${ico("arrowRight","icon icon-sm")} ${trip.direction}（${trip.route}）</div>
-        <div class="stepSub">${t("departure", trip.boardTime, trip.minUntil)}</div>
-        ${trip.fare != null ? `<div class="stepSub" style="font-weight:700;">${t("fareLine", trip.fare)}</div>` : ""}
-      </div>
-      <div class="navStep">
-        <div class="stepLabel">${t("stepAlight")}</div>
-        <div class="stepMain">${t("stopsAhead", trip.stopsBetween)}</div>
-        <div class="stepSub">${t("alightAt", displayStopName(trip.alightStop))}</div>
-      </div>
-      <div class="navStep">
-        <div class="stepLabel">${t("stepArrive")}</div>
-        <div class="stepMain">${t("arriveAt", displayStopName(destinationStop.stop_name))}</div>
-      </div>`;
-  } else {
-    html += `
-      <div class="navStep">
-        <div class="stepLabel">${t("stepBoard")}</div>
-        <div class="stepMain">${t("noDirect")}</div>
-        <div class="stepSub">${t("noDirectSub")}</div>
-      </div>
-      <div class="navStep">
-        <div class="stepLabel">${t("stepArrive")}</div>
-        <div class="stepMain">${t("arriveAt", displayStopName(destinationStop.stop_name))}</div>
-      </div>`;
+  if (!originStop && !myPos) { body.innerHTML = `<div class="navEmpty"><div class="bigIcon">${ico("pin","icon icon-lg")}</div>${t("navEmptyGps")}<br>${t("navEmptyGpsSub")}</div>`; openSheet("navScreen", true); return; }
+  if (!journey) {
+    body.innerHTML = `<div class="navEmpty"><div class="bigIcon">${ico("compass","icon icon-lg")}</div><b>${t("noRoute")}</b><br>${t("noRouteSub")}</div>`;
+    openSheet("navScreen", true);
+    return;
   }
 
+  const j = journey;
+  const dn = (n) => escapeHtml(displayStopName(n));
+  const step = (cls, label, main, subs, mid) => `
+    <div class="navStep ${cls || ""}">
+      <div class="stepLabel">${label}</div>
+      <div class="stepMain">${main}</div>
+      ${mid || ""}
+      ${(subs || []).filter(Boolean).map(s => `<div class="stepSub">${s}</div>`).join("")}
+    </div>`;
+
+  const first = j.legs[0], last = j.legs[j.legs.length - 1];
+  const fareText = j.fareTotal > 0 || j.fareUnknown === 0
+    ? (j.fareUnknown ? t("fareTotalPartial", j.fareTotal) : t("fareTotal", j.fareTotal)) : "";
+
+  let html = `<div class="journeySummary">
+      <span class="chip ${j.transfers === 0 ? "direct" : ""}">${t("transferCount", j.transfers)}</span>
+      <span>${t("rideSpan", fmtClock(first.boardTime), fmtClock(j.arrival), j.arrival - first.boardTime)}</span>
+      ${fareText ? `<span>${fareText}</span>` : ""}
+    </div>`;
+  if (j.tomorrow) html += `<div class="journeyNote">${t("tomorrowNote")}</div>`;
+
+  html += `<div class="navStepList">`;
+
+  // --- 出発 ---
+  if (originStop) {
+    html += step("", t("stepStart"), t("startFromStop", dn(originStop.stop_name)), []);
+  } else {
+    const w = walkInfo(j.startWalkM);
+    html += step("", t("stepCurrent"), t("nearYou", dn(first.boardName)), [`${w.distText}・${w.timeText}`],
+      `<button class="googleNavBtn" id="googleWalkBtn">${ico("walk")}${t("googleWalkBtn")}</button>`);
+  }
+
+  // --- 各区間 ---
+  j.legs.forEach((leg, i) => {
+    const color = colorForRoute(leg.route);
+    const isLast = i === j.legs.length - 1;
+
+    if (i > 0) {
+      const prev = j.legs[i - 1];
+      let main;
+      if (leg.walkBefore) {
+        const w = walkInfo(leg.walkBefore.distM);
+        main = t("walkTransfer", dn(prev.alightName), dn(leg.boardName), w.distText, w.timeText);
+      } else {
+        main = t("transferAt", dn(leg.boardName));
+      }
+      html += step("transfer", t("stepTransfer"), main, [t("waitMin", leg.waitMin)]);
+    }
+
+    const dep = (i === 0 && !j.tomorrow)
+      ? t("departure", fmtClock(leg.boardTime), Math.max(0, Math.round(leg.boardTime - j.nowMin)))
+      : t("departClock", fmtClock(leg.boardTime));
+    const badge = `<div class="navBoardBadge" style="background:${color}22;color:${color};">${ico("arrowRight","icon icon-sm")} ${escapeHtml(leg.direction)}（${escapeHtml(leg.route)}）</div>`;
+    html += step("", i === 0 ? t("stepBoard") : t("stepTransferBoard"), t("boardAt", dn(leg.boardName)),
+      [dep, leg.fare != null ? `<b>${t("fareLine", leg.fare)}</b>` : ""], badge);
+
+    html += step("alight", isLast ? t("stepAlight") : t("stepAlightTransfer"), t("alightAt", dn(leg.alightName)),
+      [`${t("stopsAhead", leg.stops)}・${t("arriveClock", fmtClock(leg.alightTime))}`]);
+  });
+
+  // --- 到着 ---
+  html += step("", t("stepArrive"), t("arriveAt", dn(destinationStop.stop_name)), [t("arriveClock", fmtClock(j.arrival))]);
   html += `</div>`;
+
   body.innerHTML = html;
   const gBtn = document.getElementById("googleWalkBtn");
-  if (gBtn) gBtn.onclick = () => openGoogleWalkNav(myPos.lat, myPos.lng, nearestStop.lat, nearestStop.lng);
+  const op = originPos();
+  if (gBtn && op) gBtn.onclick = () => openGoogleWalkNav(op.lat, op.lng, first.pts[0].lat, first.pts[0].lng);
 
   openSheet("navScreen", true);
 }
