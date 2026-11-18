@@ -691,6 +691,7 @@ const I18N = {
     boardAt:(name)=>`${name} から乗車`,
     departure:(t,m)=>`発車 ${t}（あと${fmtRemain(m,"ja")}）`,
     ovFareLabel:"運賃合計", ovBreakdown:"運賃内訳", ovTotal:"合計", fareUnknownShort:"運賃不明", ovFareUnknownNote:"一部区間の運賃は不明です", ovWalkFrom:(m)=>`現在地から徒歩${m}分`, ovWalkTransfer:(m)=>`徒歩${m}分で乗換`, ovMin:(n)=>`${n}分`, ovStops:(n)=>`${n}駅`, ovDirTo:(d)=>`${d}`, ovTitle:"ルート全体",
+    destTag:"目的地",
     stopsAhead:(n)=>`${n}駅先で降車`,
     viaStops:(n)=>`途中のバス停 ${n}か所`, viaFareNote:"運賃は乗車バス停からの金額", viaAlightTag:"降車", routeOptions:"ルート候補（乗り継ぎ路線）",
     alightAt:(name)=>`${name} で降ります`,
@@ -744,6 +745,7 @@ const I18N = {
     boardAt:(name)=>`Board at ${name}`,
     departure:(t,m)=>`Departs ${t} (in ${fmtRemain(m,"en")})`,
     ovFareLabel:"Total fare", ovBreakdown:"Fare breakdown", ovTotal:"Total", fareUnknownShort:"Fare n/a", ovFareUnknownNote:"Fare unknown for some sections", ovWalkFrom:(m)=>`${m} min walk from your location`, ovWalkTransfer:(m)=>`${m} min walk to transfer`, ovMin:(n)=>`${n} min`, ovStops:(n)=>`${n} stop(s)`, ovDirTo:(d)=>`${d}`, ovTitle:"Whole route",
+    destTag:"Dest.",
     stopsAhead:(n)=>`Get off ${n} stop(s) later`,
     viaStops:(n)=>`${n} stop(s) in between`, viaFareNote:"Fares are from the boarding stop", viaAlightTag:"Exit", routeOptions:"Route options (incl. transfers)",
     alightAt:(name)=>`Get off at ${name}`,
@@ -797,6 +799,7 @@ const I18N = {
     boardAt:(name)=>`Montez à ${name}`,
     departure:(t,m)=>`Départ ${t} (dans ${fmtRemain(m,"fr")})`,
     ovFareLabel:"Tarif total", ovBreakdown:"Détail des tarifs", ovTotal:"Total", fareUnknownShort:"Tarif inconnu", ovFareUnknownNote:"Tarif inconnu pour certains tronçons", ovWalkFrom:(m)=>`${m} min à pied depuis votre position`, ovWalkTransfer:(m)=>`${m} min à pied pour la correspondance`, ovMin:(n)=>`${n} min`, ovStops:(n)=>`${n} arrêt(s)`, ovDirTo:(d)=>`${d}`, ovTitle:"Itinéraire complet",
+    destTag:"Destination",
     stopsAhead:(n)=>`Descendez ${n} arrêt(s) plus loin`,
     viaStops:(n)=>`${n} arrêt(s) intermédiaire(s)`, viaFareNote:"Tarifs depuis l'arrêt de montée", viaAlightTag:"Sortie", routeOptions:"Itinéraires (avec correspondances)",
     alightAt:(name)=>`Descendez à ${name}`,
@@ -1386,18 +1389,24 @@ function openDetail(stopKey, keepState){
     const chips = times.map((tm, i) => `<span class="ttChip ${i === next.index ? "next" : ""}">${tm || "-"}</span>`).join("");
 
     // 次／その次のバス停（＋終点まで展開ボタン）
-    const rest = getUpcomingStops(r, stop, next.index);
+    let rest = getUpcomingStops(r, stop, next.index);
+    // 行先が設定されていて、この路線がそこへ行く場合は「行先までの停留所」だけを全部表示する
+    let toDest = false;
+    if (rest && destinationStop && destinationStop.key !== stop.key) {
+      const di = rest.findIndex(p => p.stop_name === destinationStop.stop_name);
+      if (di >= 0) { rest = rest.slice(0, di + 1); toDest = true; }
+    }
     let nextStopsHtml = "";
     if (rest) {
       if (rest.length === 0) {
         nextStopsHtml = `<div class="nextStops"><div class="nsEnd">${t("terminusHere")}</div></div>`;
       } else {
         const labels = [t("nextStopLabel"), t("nextNextLabel")];
-        const head = rest.slice(0, 2);
-        const tail = rest.slice(2);
+        const head = toDest ? rest : rest.slice(0, 2);
+        const tail = toDest ? [] : rest.slice(2);
         const expanded = detailExpanded.has(cardIdx);
         const mkKey = (p) => `${p.stop_name}|${p.lat}|${p.lng}`;
-        const rowHtml = (p, i, isLast) => `<div class="nsRow${isLast && rest.length > 2 ? " isTerm" : ""}"><span class="nsBadge${i + 1 >= 10 ? " small" : ""}">${i + 1}</span><span class="nsLabel">${i < 2 ? labels[i] : ""}</span><span class="nsName" data-term="${t("termTag")}">${escapeHtml(displayStopName(p.stop_name))}</span>${(() => { const fy = fareLookup(r.route, stop.stop_name, p.stop_name); return fy != null ? `<span class="nsFare">${fmtYen(fy)}${lang === "ja" ? "円" : ""}</span>` : ""; })()}<span class="nsTime">${p.time ? escapeHtml(String(p.time).trim()) : ""}</span></div>`;
+        const rowHtml = (p, i, isLast) => `<div class="nsRow${(toDest && i === rest.length - 1) || (!toDest && isLast && rest.length > 2) ? " isTerm" : ""}"><span class="nsBadge${i + 1 >= 10 ? " small" : ""}">${i + 1}</span><span class="nsLabel">${!toDest && i < 2 ? labels[i] : ""}</span><span class="nsName" data-term="${toDest ? t("destTag") : t("termTag")}">${escapeHtml(displayStopName(p.stop_name))}</span>${(() => { const fy = fareLookup(r.route, stop.stop_name, p.stop_name); return fy != null ? `<span class="nsFare">${fmtYen(fy)}${lang === "ja" ? "円" : ""}</span>` : ""; })()}<span class="nsTime">${p.time ? escapeHtml(String(p.time).trim()) : ""}</span></div>`;
         head.forEach((p, i) => { const k = mkKey(p); if (!hlMap.has(k) || hlMap.get(k).rank > i + 1) hlMap.set(k, { rank: i + 1, color }); });
         tail.forEach((p, j) => { if (expanded) extraHl.push({ k: mkKey(p), rank: j + 3, color }); });
         nextStopsHtml = `<div class="nextStops" style="--c:${color}">`
@@ -1432,7 +1441,8 @@ function openDetail(stopKey, keepState){
 
   const goBtn = `<button class="goHereBtn" id="goHereBtn">${t("goHereBtn")}</button>`
     + `<button class="goHereBtn secondary" id="setOriginBtn">${t("setOriginBtn")}</button>`;
-  document.getElementById("detailBody").innerHTML = metaHtml + filterNoteHtml + cardsHtml + goBtn;
+  const ovHtml = (journey && journey.legs && journey.legs.length && destinationStop && destinationStop.key !== stop.key) ? buildOverviewHtml(journey) : "";
+  document.getElementById("detailBody").innerHTML = metaHtml + ovHtml + filterNoteHtml + cardsHtml + goBtn;
   document.querySelectorAll("#detailBody .nsMoreBtn").forEach(btn => {
     btn.onclick = () => {
       const i = Number(btn.dataset.card);
@@ -1956,6 +1966,51 @@ function updateNavCta(){
 //=====================================================
 // ナビ画面
 //=====================================================
+// ルート全体の概要：総額・路線の乗り継ぎ・運賃内訳（経路画面とバス停ポップアップで共用）
+function buildOverviewHtml(j){
+  const dn = (n) => escapeHtml(displayStopName(n));
+  const first = j.legs[0];
+    const yen = lang === "ja" ? "円" : "";
+    const fareKnown = j.fareTotal > 0 || j.fareUnknown === 0;
+    const mins = (n) => fmtRemain(n, lang);
+    let strip = `<div class="ovStrip">`;
+    // 出発
+    const startName = originStop ? originStop.stop_name : first.boardName;
+    strip += `<div class="ovNode start"><span class="ovName">${dn(startName)}</span><span class="ovTime">${fmtClock(first.boardTime)}</span></div>`;
+    if (!originStop && j.startWalkM > 0) strip += `<div class="ovSub">${t("ovWalkFrom", Math.max(1, j.startWalkMin))}</div>`;
+    j.legs.forEach((leg, i) => {
+      const color = colorForRoute(leg.route);
+      if (i > 0) {
+        const prev = j.legs[i - 1];
+        strip += `<div class="ovNode xfer"><span class="ovName">${dn(prev.alightName)}</span><span class="ovTag">${t("stepTransfer")}</span><span class="ovTime">${fmtClock(prev.alightTime)}</span></div>`;
+        if (leg.walkBefore) {
+          strip += `<div class="ovWalkLine">${t("ovWalkTransfer", Math.max(1, leg.walkBefore.min))} → ${dn(leg.boardName)}（${fmtClock(leg.boardTime)}発）</div>`;
+        } else if (leg.waitMin > 0) {
+          strip += `<div class="ovWalkLine">${t("waitMin", leg.waitMin)}（${fmtClock(leg.boardTime)}発）</div>`;
+        }
+      }
+      strip += `<div class="ovLeg" style="--c:${color}"><span class="ovRoute">${escapeHtml(leg.route)}</span><span class="ovDir">${escapeHtml(leg.direction)}</span>
+        <div class="ovLegMeta"><span>${fmtClock(leg.boardTime)} → ${fmtClock(leg.alightTime)}</span><span>${mins(Math.round(leg.alightTime - leg.boardTime))}</span><span>${t("ovStops", leg.stops)}</span><span class="ovLegFare">${leg.fare != null ? fmtYen(leg.fare) + yen : t("fareUnknownShort")}</span></div></div>`;
+    });
+    strip += `<div class="ovNode end"><span class="ovName">${dn(destinationStop.stop_name)}</span><span class="ovTime">${fmtClock(j.arrival)}</span></div></div>`;
+
+    let fares = "";
+    if (j.legs.length > 1) {
+      fares = `<div class="ovFares"><div class="ovFaresTitle">${t("ovBreakdown")}</div>`
+        + j.legs.map(leg => `<div class="ovFareRow" style="--c:${colorForRoute(leg.route)}"><span class="dot"></span><span class="what"><b>${escapeHtml(leg.route)}</b><span>${dn(leg.boardName)} → ${dn(leg.alightName)}</span></span><span class="amt">${leg.fare != null ? fmtYen(leg.fare) + yen : t("fareUnknownShort")}</span></div>`).join("")
+        + `<div class="ovFareRow total"><span class="what">${t("ovTotal")}</span><span class="amt">${fareKnown ? fmtYen(j.fareTotal) + yen + (j.fareUnknown ? "＋" : "") : t("fareUnknownShort")}</span></div></div>`;
+    }
+
+    return `<div class="ovCard">
+      <div class="ovTop">
+        <div><div class="ovFareLabel">${t("ovFareLabel")}</div>
+          <div class="ovFare">${fareKnown ? `${fmtYen(j.fareTotal)}<small>${yen}${j.fareUnknown ? "＋" : ""}</small>` : t("fareUnknownShort")}</div>
+          ${j.fareUnknown && fareKnown ? `<div class="ovFareNote">${t("ovFareUnknownNote")}</div>` : ""}</div>
+        <div class="ovMeta"><span class="chip ${j.transfers === 0 ? "direct" : ""}">${t("transferCount", j.transfers)}</span>
+          <span>${fmtClock(first.boardTime)} → ${fmtClock(j.arrival)}（${mins(Math.round(j.arrival - first.boardTime))}）</span></div>
+      </div>${strip}${fares}</div>`;
+}
+
 function openNavScreen(){
   const body = document.getElementById("navBody");
 
@@ -1991,48 +2046,7 @@ function openNavScreen(){
     }).join("") + `</div>`;
   }
 
-  // --- ルート全体の概要：総額・路線の乗り継ぎ・運賃内訳 ---
-  {
-    const yen = lang === "ja" ? "円" : "";
-    const fareKnown = j.fareTotal > 0 || j.fareUnknown === 0;
-    const mins = (n) => fmtRemain(n, lang);
-    let strip = `<div class="ovStrip">`;
-    // 出発
-    const startName = originStop ? originStop.stop_name : first.boardName;
-    strip += `<div class="ovNode start"><span class="ovName">${dn(startName)}</span><span class="ovTime">${fmtClock(first.boardTime)}</span></div>`;
-    if (!originStop && j.startWalkM > 0) strip += `<div class="ovSub">${t("ovWalkFrom", Math.max(1, j.startWalkMin))}</div>`;
-    j.legs.forEach((leg, i) => {
-      const color = colorForRoute(leg.route);
-      if (i > 0) {
-        const prev = j.legs[i - 1];
-        strip += `<div class="ovNode xfer"><span class="ovName">${dn(prev.alightName)}</span><span class="ovTag">${t("stepTransfer")}</span><span class="ovTime">${fmtClock(prev.alightTime)}</span></div>`;
-        if (leg.walkBefore) {
-          strip += `<div class="ovWalkLine">${t("ovWalkTransfer", Math.max(1, leg.walkBefore.min))} → ${dn(leg.boardName)}（${fmtClock(leg.boardTime)}発）</div>`;
-        } else if (leg.waitMin > 0) {
-          strip += `<div class="ovWalkLine">${t("waitMin", leg.waitMin)}（${fmtClock(leg.boardTime)}発）</div>`;
-        }
-      }
-      strip += `<div class="ovLeg" style="--c:${color}"><span class="ovRoute">${escapeHtml(leg.route)}</span><span class="ovDir">${escapeHtml(leg.direction)}</span>
-        <div class="ovLegMeta"><span>${fmtClock(leg.boardTime)} → ${fmtClock(leg.alightTime)}</span><span>${mins(Math.round(leg.alightTime - leg.boardTime))}</span><span>${t("ovStops", leg.stops)}</span><span class="ovLegFare">${leg.fare != null ? fmtYen(leg.fare) + yen : t("fareUnknownShort")}</span></div></div>`;
-    });
-    strip += `<div class="ovNode end"><span class="ovName">${dn(destinationStop.stop_name)}</span><span class="ovTime">${fmtClock(j.arrival)}</span></div></div>`;
-
-    let fares = "";
-    if (j.legs.length > 1) {
-      fares = `<div class="ovFares"><div class="ovFaresTitle">${t("ovBreakdown")}</div>`
-        + j.legs.map(leg => `<div class="ovFareRow" style="--c:${colorForRoute(leg.route)}"><span class="dot"></span><span class="what"><b>${escapeHtml(leg.route)}</b><span>${dn(leg.boardName)} → ${dn(leg.alightName)}</span></span><span class="amt">${leg.fare != null ? fmtYen(leg.fare) + yen : t("fareUnknownShort")}</span></div>`).join("")
-        + `<div class="ovFareRow total"><span class="what">${t("ovTotal")}</span><span class="amt">${fareKnown ? fmtYen(j.fareTotal) + yen + (j.fareUnknown ? "＋" : "") : t("fareUnknownShort")}</span></div></div>`;
-    }
-
-    html += `<div class="ovCard">
-      <div class="ovTop">
-        <div><div class="ovFareLabel">${t("ovFareLabel")}</div>
-          <div class="ovFare">${fareKnown ? `${fmtYen(j.fareTotal)}<small>${yen}${j.fareUnknown ? "＋" : ""}</small>` : t("fareUnknownShort")}</div>
-          ${j.fareUnknown && fareKnown ? `<div class="ovFareNote">${t("ovFareUnknownNote")}</div>` : ""}</div>
-        <div class="ovMeta"><span class="chip ${j.transfers === 0 ? "direct" : ""}">${t("transferCount", j.transfers)}</span>
-          <span>${fmtClock(first.boardTime)} → ${fmtClock(j.arrival)}（${mins(Math.round(j.arrival - first.boardTime))}）</span></div>
-      </div>${strip}${fares}</div>`;
-  }
+  html += buildOverviewHtml(j);
 
   html += `<div class="navStepList">`;
 
